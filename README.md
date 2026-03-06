@@ -23,6 +23,7 @@ Supports both **UDP** and **DoH (DNS-over-HTTPS)** resolvers with end-to-end tun
 | 🌍 **Regional Resolver Lists** | Built-in support for regional intranet resolver lists (7,800+ IPs) |
 | ⚡ **High Concurrency** | 50 parallel workers by default — scans thousands of resolvers in minutes |
 | 📋 **JSON Pipeline** | Output from one scan feeds into the next for multi-stage filtering |
+| 🌐 **CIDR Input** | Accept IP ranges like `185.51.200.0/24` — auto-expanded to individual hosts |
 
 ---
 
@@ -420,7 +421,7 @@ Step format: `type:key=val,key=val`. Optional params: `count`, `timeout`.
 
 ### Input
 
-Plain text file with one entry per line. Supports both IPs and DoH URLs:
+Plain text file with one entry per line. Supports IPs, CIDR ranges, and DoH URLs:
 
 ```text
 # UDP resolvers (one IP per line)
@@ -428,11 +429,17 @@ Plain text file with one entry per line. Supports both IPs and DoH URLs:
 1.1.1.1
 9.9.9.9
 
+# CIDR ranges (expanded automatically)
+185.51.200.0/24
+10.202.10.0/28
+
 # DoH resolvers (full URLs)
 https://dns.google/dns-query
 https://cloudflare-dns.com/dns-query
 https://dns.quad9.net/dns-query
 ```
+
+**CIDR support:** Ranges like `1.2.3.0/24` are automatically expanded to individual host IPs (network and broadcast addresses are excluded). This is useful for scanning regional IP blocks (e.g. `iran-ipv4.cidrs` files). A warning is shown when expansion exceeds 100,000 IPs.
 
 Can also accept JSON output from a previous scan (only `passed` entries are used by default).
 
@@ -576,6 +583,7 @@ MIT
 | 🌍 **resolverهای محلی** | لیست داخلی 7,800+ آی‌پی resolver منطقه‌ای |
 | ⚡ **همزمانی بالا** | 50 worker موازی — هزاران resolver در چند دقیقه اسکن می‌شود |
 | 📋 **خروجی JSON** | خروجی هر اسکن ورودی اسکن بعدی می‌شود |
+| 🌐 **ورودی CIDR** | رنج آی‌پی مثل `185.51.200.0/24` را می‌خواند و به صورت خودکار باز می‌کند |
 
 ---
 
