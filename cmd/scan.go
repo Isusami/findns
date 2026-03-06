@@ -170,25 +170,41 @@ func runScan(cmd *cobra.Command, args []string) error {
 	return scanner.WriteChainReport(report, outputFile)
 }
 
+func pad(s string, width int) string {
+	if len(s) >= width {
+		return s
+	}
+	return s + strings.Repeat(" ", width-len(s))
+}
+
+func hline(left, fill, right string, width int) string {
+	return left + strings.Repeat(fill, width) + right
+}
+
 func printBanner(count int, doh bool, domain string, steps []scanner.Step) {
 	mode := "UDP"
 	if doh {
 		mode = "DoH"
 	}
 
+	// Dynamic box width: at least 38, wider if domain is long
+	inner := 38
+	if domain != "" && len(domain)+15 > inner {
+		inner = len(domain) + 17
+	}
 	w := os.Stderr
 	fmt.Fprintf(w, "\n")
-	fmt.Fprintf(w, "  %s\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510%s\n", colorDim, colorReset)
-	fmt.Fprintf(w, "  %s\u2502%s  %s%sfindns%s                       %s\u2502%s\n", colorDim, colorReset, colorBold, colorCyan, colorReset, colorDim, colorReset)
-	fmt.Fprintf(w, "  %s\u2502%s  %sDNS Tunnel Resolver Scanner%s          %s\u2502%s\n", colorDim, colorReset, colorDim, colorReset, colorDim, colorReset)
-	fmt.Fprintf(w, "  %s\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524%s\n", colorDim, colorReset)
-	fmt.Fprintf(w, "  %s\u2502%s  Mode:      %s%-25s%s%s\u2502%s\n", colorDim, colorReset, colorWhite, mode, colorReset, colorDim, colorReset)
-	fmt.Fprintf(w, "  %s\u2502%s  Resolvers: %s%-25d%s%s\u2502%s\n", colorDim, colorReset, colorWhite, count, colorReset, colorDim, colorReset)
+	fmt.Fprintf(w, "  %s%s%s\n", colorDim, hline("\u250c", "\u2500", "\u2510", inner), colorReset)
+	fmt.Fprintf(w, "  %s\u2502%s  %s%s%-*s%s%s\u2502%s\n", colorDim, colorReset, colorBold, colorCyan, inner-4, "findns", colorReset, colorDim, colorReset)
+	fmt.Fprintf(w, "  %s\u2502%s  %s%-*s%s%s\u2502%s\n", colorDim, colorReset, colorDim, inner-4, "DNS Tunnel Resolver Scanner", colorReset, colorDim, colorReset)
+	fmt.Fprintf(w, "  %s%s%s\n", colorDim, hline("\u251c", "\u2500", "\u2524", inner), colorReset)
+	fmt.Fprintf(w, "  %s\u2502%s  Mode:      %s%s%s%s\u2502%s\n", colorDim, colorReset, colorWhite, pad(mode, inner-15), colorReset, colorDim, colorReset)
+	fmt.Fprintf(w, "  %s\u2502%s  Resolvers: %s%s%s%s\u2502%s\n", colorDim, colorReset, colorWhite, pad(fmt.Sprintf("%d", count), inner-15), colorReset, colorDim, colorReset)
 	if domain != "" {
-		fmt.Fprintf(w, "  %s\u2502%s  Domain:    %s%-25s%s%s\u2502%s\n", colorDim, colorReset, colorCyan, domain, colorReset, colorDim, colorReset)
+		fmt.Fprintf(w, "  %s\u2502%s  Domain:    %s%s%s%s\u2502%s\n", colorDim, colorReset, colorCyan, pad(domain, inner-15), colorReset, colorDim, colorReset)
 	}
-	fmt.Fprintf(w, "  %s\u2502%s  Workers:   %s%-25d%s%s\u2502%s\n", colorDim, colorReset, colorWhite, workers, colorReset, colorDim, colorReset)
-	fmt.Fprintf(w, "  %s\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518%s\n", colorDim, colorReset)
+	fmt.Fprintf(w, "  %s\u2502%s  Workers:   %s%s%s%s\u2502%s\n", colorDim, colorReset, colorWhite, pad(fmt.Sprintf("%d", workers), inner-15), colorReset, colorDim, colorReset)
+	fmt.Fprintf(w, "  %s%s%s\n", colorDim, hline("\u2514", "\u2500", "\u2518", inner), colorReset)
 
 	// Step plan
 	fmt.Fprintf(w, "\n  %sPipeline:%s ", colorBold, colorReset)
