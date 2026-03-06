@@ -24,7 +24,7 @@ func loadText(path string) ([]string, error) {
 	defer f.Close()
 
 	var entries []string
-	var skipped int
+	var skipped, cidrCount int
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
@@ -35,6 +35,15 @@ func loadText(path string) ([]string, error) {
 		if strings.HasPrefix(line, "https://") {
 			entries = append(entries, line)
 			continue
+		}
+		// Try CIDR notation (e.g. 1.2.3.0/24)
+		if strings.Contains(line, "/") {
+			ips, err := expandCIDR(line)
+			if err == nil {
+				cidrCount++
+				entries = append(entries, ips...)
+				continue
+			}
 		}
 		ip := line
 		// Strip optional :port suffix
@@ -50,10 +59,44 @@ func loadText(path string) ([]string, error) {
 	if err := sc.Err(); err != nil {
 		return nil, err
 	}
+	if cidrCount > 0 {
+		fmt.Fprintf(os.Stderr, "input: expanded %d CIDR ranges -> %d IPs\n", cidrCount, len(entries))
+	}
 	if skipped > 0 {
 		fmt.Fprintf(os.Stderr, "input: skipped %d invalid entries\n", skipped)
 	}
+	if len(entries) > 100000 {
+		fmt.Fprintf(os.Stderr, "warning: %d IPs is a lot — consider using smaller CIDR ranges or filtering first\n", len(entries))
+	}
 	return entries, nil
+}
+
+func expandCIDR(cidr string) ([]string, error) {
+	ip, ipnet, err := net.ParseCIDR(cidr)
+	if err != nil {
+		return nil, err
+	}
+
+	var ips []string
+	for ip := ip.Mask(ipnet.Mask); ipnet.Contains(ip); incIP(ip) {
+		ips = append(ips, ip.String())
+	}
+
+	// Remove network and broadcast addresses for IPv4 ranges > /31
+	if len(ips) > 2 {
+		ips = ips[1 : len(ips)-1]
+	}
+
+	return ips, nil
+}
+
+func incIP(ip net.IP) {
+	for j := len(ip) - 1; j >= 0; j-- {
+		ip[j]++
+		if ip[j] > 0 {
+			break
+		}
+	}
 }
 
 func loadJSON(path string, includeFailed bool) ([]string, error) {
