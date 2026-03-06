@@ -465,6 +465,18 @@ This project was originally inspired by [net2share/dnst-scanner](https://github.
 
 ---
 
+## 📖 Farsi Guide
+
+For a complete guide in Farsi covering every command, flag, and scenario, see [GUIDE.md](GUIDE.md).
+
+---
+
+## 💖 Donate
+
+If this project helps you, consider supporting development: [samnet.dev/donate](https://www.samnet.dev/donate/)
+
+---
+
 ## 📜 License
 
 MIT
@@ -761,6 +773,18 @@ dnstt-client -doh <best-url> -pubkey-file server.pub t.mysite.com 127.0.0.1:1080
 | [ir-resolvers](https://github.com/net2share/ir-resolvers) | لیست resolverهای محلی (7,800+ IP) |
 | [dnstt](https://www.bamsoftware.com/software/dnstt/) | تانل DNS با پشتیبانی DoH/DoT |
 | [slipstream-rust](https://github.com/Mygod/slipstream-rust) | تانل DNS مبتنی بر QUIC |
+
+---
+
+## 📖 راهنمای کامل فارسی
+
+برای راهنمای جامع فارسی شامل تمام دستورات، فلگ‌ها و سناریوها، فایل [GUIDE.md](GUIDE.md) را ببینید.
+
+---
+
+## 💖 حمایت مالی
+
+اگر این پروژه به شما کمک کرد، از توسعه آن حمایت کنید: [samnet.dev/donate](https://www.samnet.dev/donate/)
 
 ---
 
