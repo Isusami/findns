@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -171,6 +172,26 @@ func runChain(cmd *cobra.Command, args []string) error {
 			return err
 		}
 		configs = append(configs, cfg)
+	}
+
+	// Pre-flight: check required binaries for e2e steps
+	for _, cfg := range configs {
+		switch cfg.name {
+		case "e2e/dnstt", "doh/e2e":
+			if _, err := exec.LookPath("dnstt-client"); err != nil {
+				return fmt.Errorf("step %q requires dnstt-client in PATH (not found)", cfg.name)
+			}
+			if _, err := exec.LookPath("curl"); err != nil {
+				return fmt.Errorf("step %q requires curl in PATH (not found)", cfg.name)
+			}
+		case "e2e/slipstream":
+			if _, err := exec.LookPath("slipstream-client"); err != nil {
+				return fmt.Errorf("step %q requires slipstream-client in PATH (not found)", cfg.name)
+			}
+			if _, err := exec.LookPath("curl"); err != nil {
+				return fmt.Errorf("step %q requires curl in PATH (not found)", cfg.name)
+			}
+		}
 	}
 
 	// Shared port pool for e2e steps

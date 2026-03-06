@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"sort"
 	"strings"
 	"time"
@@ -68,6 +69,23 @@ func runScan(cmd *cobra.Command, args []string) error {
 	ips, err := loadInput()
 	if err != nil {
 		return err
+	}
+
+	// Pre-flight: verify required binaries before wasting time scanning
+	if pubkey != "" {
+		if _, err := exec.LookPath("dnstt-client"); err != nil {
+			return fmt.Errorf("--pubkey requires dnstt-client in PATH (not found)")
+		}
+	}
+	if certPath != "" {
+		if _, err := exec.LookPath("slipstream-client"); err != nil {
+			return fmt.Errorf("--cert requires slipstream-client in PATH (not found)")
+		}
+	}
+	if (pubkey != "" || certPath != "") {
+		if _, err := exec.LookPath("curl"); err != nil {
+			return fmt.Errorf("e2e tests require curl in PATH (not found)")
+		}
 	}
 
 	dur := time.Duration(timeout) * time.Second
