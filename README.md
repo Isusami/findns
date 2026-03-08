@@ -678,6 +678,17 @@ go install github.com/SamNet-dev/findns/cmd@latest
 
 باینری‌های آماده برای Linux، macOS و Windows در صفحه [Releases](https://github.com/SamNet-dev/findns/releases) موجود است.
 
+</div>
+
+```bash
+# مثال: Linux x64
+curl -LO https://github.com/SamNet-dev/findns/releases/latest/download/findns-linux-amd64
+chmod +x findns-linux-amd64
+./findns-linux-amd64 --help
+```
+
+<div dir="rtl">
+
 ### پیش‌نیازها
 
 - **Go 1.24+** برای بیلد از سورس
@@ -800,6 +811,10 @@ go build -o findns.exe ./cmd
 # 🔒 اسکن resolverهای DoH
 ./scanner scan -i doh-resolvers.txt -o results.json \
   --domain t.example.com --doh
+
+# 🔒 اسکن DoH با تست واقعی e2e
+./scanner scan -i doh-resolvers.txt -o results.json \
+  --domain t.example.com --pubkey <hex-pubkey> --doh
 ```
 
 <div dir="rtl">
@@ -831,15 +846,16 @@ go build -o findns.exe ./cmd
 **حالت UDP:** `ping → resolve → nxdomain → edns → tunnel → e2e`
 **حالت DoH:** `doh/resolve → doh/tunnel → doh/e2e`
 
-| فلگ | توضیح |
-|-----|-------|
-| `--domain` | دامنه تانل (فعال‌سازی تست تانل/edns/e2e) |
-| `--pubkey` | کلید عمومی سرور DNSTT (فعال‌سازی تست e2e) |
-| `--cert` | مسیر گواهی Slipstream (فعال‌سازی تست Slipstream) |
-| `--doh` | اسکن DoH به جای UDP |
-| `--skip-ping` | رد کردن مرحله ping |
-| `--skip-nxdomain` | رد کردن بررسی هایجک |
-| `--top` | تعداد نتایج برتر برای نمایش (پیش‌فرض: 10) |
+| فلگ | توضیح | پیش‌فرض |
+|-----|-------|---------|
+| `--domain` | دامنه تانل (فعال‌سازی تست تانل/edns/e2e) | — |
+| `--pubkey` | کلید عمومی سرور DNSTT (فعال‌سازی تست e2e) | — |
+| `--cert` | مسیر گواهی Slipstream (فعال‌سازی تست Slipstream) | — |
+| `--test-url` | آدرس برای تست اتصال e2e | `https://httpbin.org/ip` |
+| `--doh` | اسکن DoH به جای UDP | `false` |
+| `--skip-ping` | رد کردن مرحله ping | `false` |
+| `--skip-nxdomain` | رد کردن بررسی هایجک | `false` |
+| `--top` | تعداد نتایج برتر برای نمایش | `10` |
 
 ---
 
@@ -854,6 +870,12 @@ go build -o findns.exe ./cmd
 ```
 
 <div dir="rtl">
+
+**سرویس‌های DoH داخلی** شامل:
+- 🔵 Google (`dns.google`)
+- 🟠 Cloudflare (`cloudflare-dns.com`)
+- 🟣 Quad9 (`dns.quad9.net`)
+- 🟢 AdGuard, Mullvad, NextDNS, LibreDNS, BlahDNS و بیشتر
 
 ---
 
@@ -871,44 +893,184 @@ go build -o findns.exe ./cmd
 ./scanner local -o resolvers.txt
 
 # حالت 2: کشف resolver جدید (--discover)
-# از رنج‌های CIDR ایرانی (~10.8M آی‌پی)
+# از رنج‌های CIDR ایرانی (~10.8M آی‌پی) — اکثراً DNS سرور نیستند
 ./scanner local -o candidates.txt --discover
 
-# اسکن دسته‌ای (بدون تکرار)
+# تنظیم تعداد نمونه در هر subnet
+./scanner local -o candidates.txt --discover --sample 5    # 5 آی‌پی/subnet
+./scanner local -o candidates.txt --discover --sample 50   # 50 آی‌پی/subnet
+
+# اسکن دسته‌ای (بدون تکرار، بدون آی‌پی تکراری)
 ./scanner local -o batch1.txt --discover --batch 1000000
 ./scanner local -o batch2.txt --discover --batch 1000000 --offset 1000000
 
-# نمایش رنج‌ها
+# تمام آی‌پی‌ها (هشدار: اسکن روزها طول می‌کشد!)
+./scanner local -o all-iran.txt --discover --full
+
+# نمایش رنج‌های CIDR
 ./scanner local --list-ranges
 ```
 
 <div dir="rtl">
 
-| فلگ | توضیح |
-|-----|-------|
-| `--discover` | حالت کشف resolver جدید (از CIDR) |
-| `--sample N` | [discover] آی‌پی تصادفی از هر subnet (پیش‌فرض: 10) |
-| `--full` | [discover] تمام ~10.8M آی‌پی |
-| `--batch N` | [discover] دقیقاً N آی‌پی (با `--offset`) |
-| `--offset N` | [discover] رد کردن N آی‌پی اول |
-| `--list-ranges` | چاپ رنج‌های CIDR |
+| فلگ | توضیح | پیش‌فرض |
+|-----|-------|---------|
+| `--discover` | حالت کشف resolver جدید (از CIDR) | `false` |
+| `--sample N` | [discover] آی‌پی تصادفی از هر subnet | `10` |
+| `--full` | [discover] تمام ~10.8M آی‌پی | `false` |
+| `--batch N` | [discover] دقیقاً N آی‌پی (با `--offset`) | `0` |
+| `--offset N` | [discover] رد کردن N آی‌پی اول | `0` |
+| `--list-ranges` | چاپ رنج‌های CIDR و خروج | `false` |
 
 ---
 
-### دستورات جداگانه
+### 🏓 `ping` — بررسی دسترسی‌پذیری ICMP
 
-| دستور | توضیح | متریک |
-|-------|-------|-------|
-| 🏓 `ping` | بررسی دسترسی‌پذیری ICMP | `ping_ms` |
-| 🔎 `resolve` | تست resolve رکورد A | `resolve_ms` |
-| 🔎 `resolve tunnel` | بررسی NS delegation + رکورد glue | `resolve_ms` |
-| 🛡️ `nxdomain` | تشخیص هایجک DNS | `hijack`, `nxdomain_ok` |
-| 📏 `edns` | تست سایز payload EDNS (512/900/1232) | `edns_max` |
-| 🚇 `e2e dnstt` | تست واقعی تانل DNSTT (UDP) | `e2e_ms` |
-| 🚇 `e2e slipstream` | تست واقعی تانل Slipstream | `e2e_ms` |
-| 🔒 `doh resolve` | تست resolve از طریق DoH | `resolve_ms` |
-| 🔒 `doh resolve tunnel` | بررسی NS از طریق DoH | `resolve_ms` |
-| 🔒 `doh e2e` | تست واقعی تانل DNSTT از طریق DoH | `e2e_ms` |
+</div>
+
+```bash
+./scanner ping -i resolvers.txt -o result.json
+./scanner ping -i resolvers.txt -o result.json -c 5 -t 2
+```
+
+<div dir="rtl">
+
+📊 **متریک:** `ping_ms` (میانگین RTT)
+
+---
+
+### 🔎 `resolve` — تست Resolve رکورد DNS
+
+</div>
+
+```bash
+./scanner resolve -i resolvers.txt -o result.json --domain google.com
+```
+
+<div dir="rtl">
+
+📊 **متریک:** `resolve_ms` (میانگین زمان resolve)
+
+---
+
+### 🔎 `resolve tunnel` — بررسی NS Delegation
+
+تست اینکه آیا resolver رکوردهای NS تانل شما را می‌بیند و رکورد glue A را resolve می‌کند.
+
+</div>
+
+```bash
+./scanner resolve tunnel -i resolvers.txt -o result.json --domain t.example.com
+```
+
+<div dir="rtl">
+
+📊 **متریک:** `resolve_ms` (میانگین زمان کوئری NS + glue)
+
+---
+
+### 🛡️ `nxdomain` — تشخیص هایجک DNS
+
+تست اینکه آیا resolver برای دامنه‌های ناموجود جواب صحیح NXDOMAIN برمی‌گرداند. resolverهای هایجک‌کننده جواب جعلی NOERROR برمی‌گردانند — اینها برای تانل **امن نیستند**.
+
+</div>
+
+```bash
+./scanner nxdomain -i resolvers.txt -o result.json
+```
+
+<div dir="rtl">
+
+📊 **متریک‌ها:** `nxdomain_ok` (تعداد جواب‌های صحیح)، `hijack` (1.0 = هایجک شناسایی شد)
+
+---
+
+### 📏 `edns` — تست سایز Payload EDNS
+
+تست اینکه resolver چه اندازه بافر EDNS را پشتیبانی می‌کند. payload بزرگتر = تانل DNS سریعتر. سایزهای 512، 900 و 1232 بایت تست می‌شوند.
+
+</div>
+
+```bash
+./scanner edns -i resolvers.txt -o result.json --domain t.example.com
+```
+
+<div dir="rtl">
+
+📊 **متریک:** `edns_max` (بزرگترین payload کارآمد: 512، 900 یا 1232)
+
+---
+
+### 🚇 `e2e dnstt` — تست واقعی تانل DNSTT (UDP)
+
+واقعاً `dnstt-client` را اجرا می‌کند، تانل SOCKS ایجاد می‌کند و اتصال را با `curl` تأیید می‌کند.
+
+</div>
+
+```bash
+./scanner e2e dnstt -i resolvers.txt -o result.json \
+  --domain t.example.com --pubkey <hex-pubkey>
+```
+
+<div dir="rtl">
+
+📊 **متریک:** `e2e_ms` (زمان از شروع تا اتصال موفق)
+
+---
+
+### 🚇 `e2e slipstream` — تست واقعی تانل Slipstream
+
+</div>
+
+```bash
+./scanner e2e slipstream -i resolvers.txt -o result.json \
+  --domain s.example.com --cert /path/to/cert.pem
+```
+
+<div dir="rtl">
+
+📊 **متریک:** `e2e_ms`
+
+---
+
+### 🔒 `doh resolve` — تست Resolve از طریق DoH
+
+تست resolve رکورد DNS از طریق DoH (HTTPS POST با `application/dns-message`).
+
+</div>
+
+```bash
+./scanner doh resolve -i doh-resolvers.txt -o result.json --domain google.com
+```
+
+<div dir="rtl">
+
+---
+
+### 🔒 `doh resolve tunnel` — بررسی NS Delegation از طریق DoH
+
+</div>
+
+```bash
+./scanner doh resolve tunnel -i doh-resolvers.txt -o result.json --domain t.example.com
+```
+
+<div dir="rtl">
+
+---
+
+### 🔒 `doh e2e` — تست واقعی تانل DNSTT از طریق DoH
+
+`dnstt-client -doh <url>` را اجرا و اتصال تانل را تأیید می‌کند.
+
+</div>
+
+```bash
+./scanner doh e2e -i doh-resolvers.txt -o result.json \
+  --domain t.example.com --pubkey <hex-pubkey>
+```
+
+<div dir="rtl">
 
 ---
 
@@ -930,6 +1092,36 @@ go build -o findns.exe ./cmd
 
 <div dir="rtl">
 
+مثال chain با DoH:
+
+</div>
+
+```bash
+./scanner chain -i doh-resolvers.txt -o result.json \
+  --step "doh/resolve:domain=google.com" \
+  --step "doh/resolve/tunnel:domain=t.example.com" \
+  --step "doh/e2e:domain=t.example.com,pubkey=<key>"
+```
+
+<div dir="rtl">
+
+**تمام مراحل موجود:**
+
+| مرحله | پارامترهای الزامی | متریک‌ها | توضیح |
+|-------|-------------------|----------|-------|
+| `ping` | — | `ping_ms` | بررسی دسترسی‌پذیری ICMP |
+| `resolve` | `domain` | `resolve_ms` | resolve رکورد A |
+| `resolve/tunnel` | `domain` | `resolve_ms` | NS delegation + رکورد glue |
+| `nxdomain` | — | `hijack`, `nxdomain_ok` | بررسی صحت NXDOMAIN |
+| `edns` | `domain` | `edns_max` | تست سایز payload EDNS |
+| `e2e/dnstt` | `domain`, `pubkey` | `e2e_ms` | تست واقعی تانل DNSTT |
+| `e2e/slipstream` | `domain` | `e2e_ms` | تست واقعی تانل Slipstream |
+| `doh/resolve` | `domain` | `resolve_ms` | resolve از طریق DoH |
+| `doh/resolve/tunnel` | `domain` | `resolve_ms` | NS delegation از طریق DoH |
+| `doh/e2e` | `domain`, `pubkey` | `e2e_ms` | تست واقعی تانل از طریق DoH |
+
+فرمت مراحل: `type:key=val,key=val`. پارامترهای اختیاری: `count`, `timeout`.
+
 ---
 
 ## ⚙️ فلگ‌های عمومی
@@ -942,6 +1134,74 @@ go build -o findns.exe ./cmd
 | `--count` | `-c` | تعداد تلاش برای هر IP/URL | 3 |
 | `--workers` | | تعداد workerهای موازی | 50 |
 | `--include-failed` | | اسکن IPهای فیل‌شده از ورودی JSON | false |
+
+---
+
+## 📄 فرمت ورودی / خروجی
+
+### ورودی
+
+فایل متنی ساده با هر خط یک ورودی. از آی‌پی، رنج CIDR و آدرس DoH پشتیبانی می‌کند:
+
+</div>
+
+```text
+# resolverهای UDP (هر خط یک آی‌پی)
+8.8.8.8
+1.1.1.1
+9.9.9.9
+
+# رنج‌های CIDR (خودکار باز می‌شوند)
+185.51.200.0/24
+10.202.10.0/28
+
+# resolverهای DoH (آدرس کامل)
+https://dns.google/dns-query
+https://cloudflare-dns.com/dns-query
+https://dns.quad9.net/dns-query
+```
+
+<div dir="rtl">
+
+**پشتیبانی CIDR:** رنج‌هایی مثل `1.2.3.0/24` به صورت خودکار به آی‌پی‌های تکی باز می‌شوند (آدرس‌های network و broadcast حذف می‌شوند). برای اسکن بلوک‌های آی‌پی منطقه‌ای مفید است. در صورت بازشدن بیش از 100,000 آی‌پی هشدار نمایش داده می‌شود.
+
+همچنین می‌تواند خروجی JSON اسکن قبلی را به عنوان ورودی بپذیرد (فقط ورودی‌های `passed` به صورت پیش‌فرض استفاده می‌شوند).
+
+### خروجی
+
+JSON با نتایج ساختاریافته:
+
+</div>
+
+```json
+{
+  "steps": [
+    {
+      "name": "ping",
+      "tested": 10000,
+      "passed": 9200,
+      "failed": 800,
+      "duration_secs": 15.1
+    }
+  ],
+  "passed": [
+    {
+      "ip": "1.1.1.1",
+      "metrics": {
+        "ping_ms": 4.2,
+        "resolve_ms": 15.3,
+        "edns_max": 1232,
+        "e2e_ms": 3200.5
+      }
+    }
+  ],
+  "failed": [
+    {"ip": "9.9.9.9"}
+  ]
+}
+```
+
+<div dir="rtl">
 
 ---
 
@@ -979,6 +1239,22 @@ dnstt-client -udp <best-ip>:53 -pubkey-file server.pub t.mysite.com 127.0.0.1:10
 
 # ۳. استفاده از بهترین resolver
 dnstt-client -doh <best-url> -pubkey-file server.pub t.mysite.com 127.0.0.1:1080
+```
+
+<div dir="rtl">
+
+### فیلتر چندمرحله‌ای با chain
+
+</div>
+
+```bash
+# فیلتر سریع → تست عمیق
+./scanner chain -i resolvers.txt -o results.json \
+  --step "ping:count=1" \
+  --step "resolve:domain=google.com,count=1" \
+  --step "nxdomain:count=2" \
+  --step "edns:domain=t.mysite.com" \
+  --step "e2e/dnstt:domain=t.mysite.com,pubkey=abc123,timeout=10"
 ```
 
 <div dir="rtl">
