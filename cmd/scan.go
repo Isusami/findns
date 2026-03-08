@@ -276,7 +276,26 @@ func printSummary(report scanner.ChainReport, topN int, totalTime time.Duration)
 	fmt.Fprintf(w, "  %s%s%s\n", colorDim, strings.Repeat("\u2500", 50), colorReset)
 
 	if len(report.Passed) == 0 {
-		fmt.Fprintf(w, "\n  %s\u2718 No resolvers passed all steps%s\n\n", colorRed, colorReset)
+		fmt.Fprintf(w, "\n  %s\u2718 No resolvers passed all steps%s\n", colorRed, colorReset)
+		// Print diagnostic hints for common failure patterns
+		for _, step := range report.Steps {
+			if step.Passed == 0 && step.Tested > 0 {
+				switch step.Name {
+				case "resolve/tunnel", "doh/resolve/tunnel":
+					fmt.Fprintf(w, "\n  %s\u26a0 Hint: resolve/tunnel had 0%% pass rate.%s\n", colorYellow, colorReset)
+					fmt.Fprintf(w, "  %sThis usually means your tunnel domain's NS delegation is not set up correctly.%s\n", colorDim, colorReset)
+					fmt.Fprintf(w, "  %sVerify with: nslookup -type=NS <your-domain> 8.8.8.8%s\n", colorDim, colorReset)
+					fmt.Fprintf(w, "  %sYou need NS + glue A records pointing to your DNSTT server.%s\n", colorDim, colorReset)
+					fmt.Fprintf(w, "  %sSee: https://github.com/SamNet-dev/findns/blob/main/GUIDE.md#-تنظیم-دامنه-تانل-مهم--قبل-از-اسکن-بخوانید%s\n", colorDim, colorReset)
+				case "ping":
+					fmt.Fprintf(w, "\n  %s\u26a0 Hint: ping had 0%% pass rate. Try --skip-ping (ICMP may be blocked).%s\n", colorYellow, colorReset)
+				case "e2e/dnstt", "e2e/slipstream", "doh/e2e":
+					fmt.Fprintf(w, "\n  %s\u26a0 Hint: e2e had 0%% pass rate. Make sure your tunnel server is running.%s\n", colorYellow, colorReset)
+				}
+				break // Only show hint for the first failing step
+			}
+		}
+		fmt.Fprintln(w)
 		return
 	}
 

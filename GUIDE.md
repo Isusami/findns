@@ -46,10 +46,8 @@ findns همه این‌ها را به صورت خودکار تست می‌کند
 **ویندوز:**
 ```powershell
 # دانلود از صفحه Release:
-# https://github.com/SamNet-dev/findns/releases/latest/download/dnstt-client-windows-amd64.exe
-# فایل را کنار findns.exe بگذارید و نامش را تغییر دهید:
-
-rename dnstt-client-windows-amd64.exe dnstt-client.exe
+# https://github.com/SamNet-dev/findns/releases/latest/download/dnstt-client.exe
+# فایل را کنار findns.exe بگذارید — همین!
 ```
 
 <div dir="rtl">
@@ -72,9 +70,9 @@ rename dnstt-client-windows-amd64.exe dnstt-client.exe
 **لینوکس:**
 ```bash
 # دانلود
-curl -LO https://github.com/SamNet-dev/findns/releases/latest/download/dnstt-client-linux-amd64
-chmod +x dnstt-client-linux-amd64
-mv dnstt-client-linux-amd64 dnstt-client
+curl -LO https://github.com/SamNet-dev/findns/releases/latest/download/dnstt-client-linux
+chmod +x dnstt-client-linux
+mv dnstt-client-linux dnstt-client
 
 # گذاشتن کنار findns (ساده‌ترین روش):
 mv dnstt-client /path/to/findns/
@@ -411,6 +409,65 @@ findns local --list-ranges
 - اگر `--discover --batch` > 0 باشد → حالت دسته‌ای فعال می‌شود (`--sample` و `--full` نادیده گرفته می‌شوند)
 - اگر `--discover --full` داده شود → تمام آی‌پی‌ها (`--sample` نادیده گرفته می‌شود)
 - اگر `--discover` بدون فلگ دیگر → حالت نمونه‌گیری با `--sample N`
+
+---
+
+## 3.6. تنظیم دامنه تانل (مهم — قبل از اسکن بخوانید)
+
+فلگ `--domain` در findns یک دامنه معمولی نیست — باید یک **ساب‌دامین با NS delegation** به سرور DNSTT/Slipstream شما باشد. بدون این تنظیم، مرحله `resolve/tunnel` همیشه 0% خواهد بود.
+
+### چطور تنظیم کنیم؟
+
+فرض کنید دامنه شما `example.com` است و سرور DNSTT روی آی‌پی `1.2.3.4` اجرا می‌شود. باید دو رکورد DNS در پنل دامنه (Cloudflare، Namecheap و ...) اضافه کنید:
+
+</div>
+
+```
+نوع      نام                مقدار
+──────    ──────────────     ──────────────
+NS        t.example.com      ns.example.com
+A         ns.example.com     1.2.3.4
+```
+
+<div dir="rtl">
+
+**توضیح:**
+- رکورد **NS**: می‌گوید "برای هر چیزی درباره `t.example.com`، از سرور `ns.example.com` بپرس"
+- رکورد **A**: می‌گوید "`ns.example.com` روی آی‌پی `1.2.3.4` است"
+
+بعد از تنظیم، سرور DNSTT شما تمام کوئری‌های DNS برای `t.example.com` را دریافت می‌کند و ترافیک تانل از آن عبور می‌کند.
+
+### تست صحت تنظیم
+
+قبل از اسکن با findns، مطمئن شوید تنظیم درست است:
+
+</div>
+
+```bash
+# تست با Google DNS (باید NS record برگرداند):
+nslookup -type=NS t.example.com 8.8.8.8
+
+# یا با dig:
+dig t.example.com NS @8.8.8.8
+
+# جواب صحیح باید شامل ns.example.com باشد.
+# اگر "NXDOMAIN" یا "no answer" گرفتید = تنظیم اشتباه است.
+```
+
+<div dir="rtl">
+
+### اشتباهات رایج
+
+| اشتباه | نتیجه |
+|--------|-------|
+| استفاده از دامنه اصلی (`--domain example.com`) به جای ساب‌دامین | resolve/tunnel فیل می‌شود چون NS دامنه اصلی به registrar اشاره می‌کند نه سرور شما |
+| فقط A record برای `t.example.com` بدون NS delegation | resolve/tunnel فیل می‌شود چون NS وجود ندارد |
+| NS تنظیم شده ولی سرور DNSTT روشن نیست | resolve/tunnel ممکن است پاس شود (NS وجود دارد) ولی e2e فیل می‌شود |
+| استفاده از `t.example.com` به صورت واقعی (دامنه تست) | resolve/tunnel فیل می‌شود — باید دامنه خودتان باشد |
+
+> **اگر resolve/tunnel برای تمام resolverها فیل شد (0%):** مشکل از resolverها نیست — مشکل از تنظیم DNS دامنه شماست. تنظیم NS delegation را بررسی کنید.
+
+> **اگر سرور DNSTT ندارید:** بدون `--domain` اسکن کنید. فقط مراحل ping/resolve/nxdomain اجرا می‌شود و resolverهای سالم را پیدا می‌کنید.
 
 ---
 
