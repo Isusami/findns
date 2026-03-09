@@ -430,9 +430,15 @@ findns local --list-ranges
 
 فلگ `--domain` در findns یک دامنه معمولی نیست — باید یک **ساب‌دامین با NS delegation** به سرور DNSTT/Slipstream شما باشد. بدون این تنظیم، مرحله `resolve/tunnel` همیشه 0% خواهد بود.
 
+### پیش‌نیازها
+
+1. یک دامنه که **Nameserver آن به Cloudflare تغییر کرده باشد** (در پنل registrar). اگر دامنه را به Cloudflare اضافه کرده‌اید ولی Nameserver را تغییر نداده‌اید، رکوردها سرو نمی‌شوند.
+2. **DNSSEC خاموش باشد** — در Cloudflare: DNS → Settings → Disable DNSSEC. اگر روشن باشد، delegation بدون امضا می‌شود و بعضی resolverها NXDOMAIN برمی‌گردانند.
+3. سرور DNSTT/Slipstream **مستقیماً روی پورت 53** گوش بدهد. اگر DNS router یا سرویس دیگری (مثل systemd-resolved) روی پورت 53 نشسته، query ها به dnstt-server نمی‌رسد.
+
 ### چطور تنظیم کنیم؟
 
-فرض کنید دامنه شما `example.com` است و سرور DNSTT روی آی‌پی `1.2.3.4` اجرا می‌شود. باید دو رکورد DNS در پنل دامنه (Cloudflare، Namecheap و ...) اضافه کنید:
+فرض کنید دامنه شما `example.com` است و سرور DNSTT روی آی‌پی `1.2.3.4` اجرا می‌شود. باید دو رکورد DNS بسازید:
 
 </div>
 
@@ -451,21 +457,69 @@ A         ns.example.com     1.2.3.4
 
 بعد از تنظیم، سرور DNSTT شما تمام کوئری‌های DNS برای `t.example.com` را دریافت می‌کند و ترافیک تانل از آن عبور می‌کند.
 
-### تست صحت تنظیم
+### تنظیم در Cloudflare (قدم به قدم)
 
-قبل از اسکن با findns، مطمئن شوید تنظیم درست است:
+1. وارد داشبورد Cloudflare شوید → سایت خود را انتخاب کنید → DNS → Records
+2. **رکورد A بسازید:**
+   - Type: `A`
+   - Name: `ns`
+   - IPv4 address: آی‌پی سرور شما (مثلاً `1.2.3.4`)
+   - Proxy status: **DNS only** (ابر خاکستری) ← بسیار مهم! اگر Proxied (ابر نارنجی) باشد پورت 53 بلاک می‌شود
+   - Save
+3. **رکورد NS بسازید:**
+   - Type: `NS`
+   - Name: `t` (فقط نام ساب‌دامین، نه کل دامنه)
+   - Nameserver: `ns.example.com` (کل آدرس با دامنه شما)
+   - Save
+4. **DNSSEC را خاموش کنید:** DNS → Settings → Disable DNSSEC
+
+### تنظیم سرور
+
+قبل از تست، مطمئن شوید dnstt-server مستقیماً روی پورت 53 اجرا شده:
 
 </div>
 
 ```bash
-# تست با Google DNS (باید NS record برگرداند):
-nslookup -type=NS t.example.com 8.8.8.8
+# چک کنید چه پروسه‌ای روی پورت 53 نشسته:
+ss -ulnp | grep :53
 
-# یا با dig:
+# باید dnstt-server یا slipstream-server ببینید.
+# اگر systemd-resolved هست، اول خاموشش کنید:
+systemctl stop systemd-resolved
+systemctl disable systemd-resolved
+
+# دامنه در دستور dnstt باید دقیقاً با NS record مچ باشد:
+# ✅ dnstt-server ... -domain t.example.com    (اگر NS برای t ساخته‌اید)
+# ❌ dnstt-server ... -domain t2.example.com   (نام متفاوت = کار نمی‌کند)
+```
+
+<div dir="rtl">
+
+### تست صحت تنظیم
+
+**روش پیشنهادی (از داخل ایران هم کار می‌کند):**
+
+</div>
+
+```bash
+# از Google DoH بپرسید (ISP پورت 53 را intercept نمی‌تواند):
+curl -s "https://dns.google/resolve?name=t.example.com&type=NS"
+
+# جواب صحیح: "Status":0 و NS record در جواب
+# اگر "Status":3 = NXDOMAIN — تنظیم اشتباه است (بخش عیب‌یابی را ببینید)
+```
+
+<div dir="rtl">
+
+**روش جایگزین (ممکن است در ایران intercept شود):**
+
+</div>
+
+```bash
+# تست با dig (از خارج ایران یا VPS):
 dig t.example.com NS @8.8.8.8
 
 # جواب صحیح باید شامل ns.example.com باشد.
-# اگر "NXDOMAIN" یا "no answer" گرفتید = تنظیم اشتباه است.
 ```
 
 <div dir="rtl">
@@ -478,10 +532,84 @@ dig t.example.com NS @8.8.8.8
 | فقط A record برای `t.example.com` بدون NS delegation | resolve/tunnel فیل می‌شود چون NS وجود ندارد |
 | NS تنظیم شده ولی سرور DNSTT روشن نیست | resolve/tunnel ممکن است پاس شود (NS وجود دارد) ولی e2e فیل می‌شود |
 | استفاده از `t.example.com` به صورت واقعی (دامنه تست) | resolve/tunnel فیل می‌شود — باید دامنه خودتان باشد |
+| DNSSEC روشن است در Cloudflare | delegation بدون امضا می‌شود و بعضی resolverها NXDOMAIN برمی‌گردانند |
+| رکورد A برای `ns` روی Proxied (ابر نارنجی) | پورت 53 به سرور نمی‌رسد — باید DNS only (ابر خاکستری) باشد |
+| Nameserver دامنه در registrar به Cloudflare تغییر نکرده | رکوردها در Cloudflare وجود دارد ولی سرو نمی‌شود — NXDOMAIN برای همه چیز |
+| DNS router (مثل dnstm) روی پورت 53 نشسته به جای dnstt-server | router دامنه تانل را نمی‌شناسد و NXDOMAIN برمی‌گرداند |
+| سرویس دیگر (systemd-resolved, bind, dnsmasq) پورت 53 را گرفته | query ها به dnstt-server نمی‌رسد |
 
 > **اگر resolve/tunnel برای تمام resolverها فیل شد (0%):** مشکل از resolverها نیست — مشکل از تنظیم DNS دامنه شماست. تنظیم NS delegation را بررسی کنید.
 
 > **اگر سرور DNSTT ندارید:** بدون `--domain` اسکن کنید. فقط مراحل ping/resolve/nxdomain اجرا می‌شود و resolverهای سالم را پیدا می‌کنید.
+
+### عیب‌یابی: NXDOMAIN با وجود تنظیم صحیح
+
+اگر رکوردها درست به نظر می‌رسند ولی هنوز NXDOMAIN می‌گیرید، مرحله به مرحله چک کنید:
+
+**مرحله ۱: آیا Cloudflare واقعاً سرو می‌کند؟**
+
+</div>
+
+```bash
+# از ISP رد شوید — مستقیم از Google DoH بپرسید:
+curl -s "https://dns.google/resolve?name=t.example.com&type=NS"
+```
+
+<div dir="rtl">
+
+- اگر `"Status":0` و NS record برگشت → Cloudflare درست کار می‌کند ✅
+- اگر `"Status":3` (NXDOMAIN) → ادامه دهید:
+  - فیلد `"Comment"` را بخوانید — نشان می‌دهد جواب از کجا آمده
+
+**مرحله ۲: آیا NXDOMAIN از سرور شماست یا Cloudflare؟**
+
+اگر Comment نوشته `"Response from [IP سرور شما]"`:
+- ✅ Cloudflare delegation درست کار می‌کند
+- ❌ مشکل از سرور شماست — چیزی روی پورت 53 دامنه را نمی‌شناسد
+
+اگر Comment نوشته `"Response from [IP دیگر]"` یا اصلاً Comment نداشت:
+- ❌ Cloudflare دامنه را سرو نمی‌کند — Nameserver registrar را چک کنید
+
+**مرحله ۳: چک کنید چه پروسه‌ای روی پورت 53 سرور نشسته**
+
+</div>
+
+```bash
+ss -ulnp | grep :53
+```
+
+<div dir="rtl">
+
+- اگر `dnstt-server` مستقیماً روی پورت 53 → تنظیم درست است
+- اگر `dnstm` یا DNS router دیگر → config آن را چک کنید که دامنه تانل تعریف شده و به پورت درست forward می‌شود
+- اگر `systemd-resolved` یا `named` یا `dnsmasq` → آن سرویس را خاموش کنید:
+
+</div>
+
+```bash
+# خاموش کردن systemd-resolved:
+systemctl stop systemd-resolved
+systemctl disable systemd-resolved
+
+# بعد dnstt-server را دوباره اجرا کنید
+```
+
+<div dir="rtl">
+
+**مرحله ۴: تست نهایی**
+
+</div>
+
+```bash
+# دوباره تست کنید:
+curl -s "https://dns.google/resolve?name=t.example.com&type=A"
+
+# اگر Status 0 برگشت = حل شد ✅
+```
+
+<div dir="rtl">
+
+> **نکته:** اگر از داخل ایران `dig` می‌زنید و NXDOMAIN می‌گیرید ولی تست DoH بالا جواب درست داد — مشکل از ISP شماست که پورت 53 را intercept می‌کند. این روی عملکرد تانل تأثیر ندارد چون ترافیک تانل رمزنگاری شده است.
 
 ---
 
