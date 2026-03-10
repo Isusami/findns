@@ -58,7 +58,7 @@ func init() {
 	scanCmd.Flags().String("domain", "", "tunnel domain (required for tunnel/edns/e2e steps)")
 	scanCmd.Flags().String("pubkey", "", "DNSTT public key (enables e2e test)")
 	scanCmd.Flags().String("cert", "", "Slipstream cert path (enables slipstream e2e test)")
-	scanCmd.Flags().String("test-url", "https://httpbin.org/ip", "URL to test through tunnel")
+	scanCmd.Flags().String("test-url", "http://httpbin.org/ip", "URL to test through tunnel")
 	scanCmd.Flags().String("proxy-auth", "", "SOCKS proxy auth as user:pass (for e2e tests)")
 	scanCmd.Flags().Bool("doh", false, "scan DoH resolvers instead of UDP")
 	scanCmd.Flags().Bool("skip-ping", false, "skip ICMP ping step")
@@ -185,7 +185,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 	}
 
 	printBanner(len(ips), dohMode, domain, steps)
-	printPreFlight(len(ips), domain, dnsttBin, slipstreamBin, steps)
+	printPreFlight(len(ips), domain, pubkey, testURL, proxyAuth, dnsttBin, slipstreamBin, steps)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
@@ -215,7 +215,7 @@ func hline(left, fill, right string, width int) string {
 	return left + strings.Repeat(fill, width) + right
 }
 
-func printPreFlight(ipCount int, domain, dnsttBin, slipstreamBin string, steps []scanner.Step) {
+func printPreFlight(ipCount int, domain, pubkey, testURL, proxyAuth, dnsttBin, slipstreamBin string, steps []scanner.Step) {
 	if !isTTY() {
 		return
 	}
@@ -242,7 +242,22 @@ func printPreFlight(ipCount int, domain, dnsttBin, slipstreamBin string, steps [
 			fmt.Fprintf(w, "    %s\u2718%s Domain: %s%s%s — %sNS delegation NOT found!%s\n",
 				colorRed, colorReset, colorCyan, domain, colorReset, colorRed, colorReset)
 			fmt.Fprintf(w, "      %sTunnel/e2e steps will likely fail. Verify your DNS setup:%s\n", colorDim, colorReset)
-			fmt.Fprintf(w, "      %snslookup -type=NS %s 8.8.8.8%s\n", colorDim, domain, colorReset)
+			fmt.Fprintf(w, "      %sdig NS %s @8.8.8.8  (or check your registrar/Cloudflare dashboard)%s\n", colorDim, domain, colorReset)
+		}
+	}
+	// Preflight e2e: test tunnel connectivity with a known-good resolver
+	if dnsttBin != "" && domain != "" && pubkey != "" {
+		fmt.Fprintf(w, "    %s…%s Tunnel preflight: testing dnstt-server connectivity...\n", colorDim, colorReset)
+		preflightTimeout := time.Duration(e2eTimeout) * time.Second
+		result := scanner.PreflightE2E(dnsttBin, domain, pubkey, testURL, proxyAuth, preflightTimeout)
+		if result.OK {
+			fmt.Fprintf(w, "\r\033[2K\033[A\033[2K    %s\u2714%s Tunnel preflight: %sconnected via %s%s\n",
+				colorGreen, colorReset, colorGreen, result.Resolver, colorReset)
+		} else {
+			fmt.Fprintf(w, "\r\033[2K\033[A\033[2K    %s\u2718%s Tunnel preflight: %sFAILED — %s%s\n",
+				colorRed, colorReset, colorRed, result.Err, colorReset)
+			fmt.Fprintf(w, "      %sYour dnstt-server may not be running or is misconfigured.%s\n", colorDim, colorReset)
+			fmt.Fprintf(w, "      %sThe e2e step will likely produce 0 results.%s\n", colorDim, colorReset)
 		}
 	}
 	fmt.Fprintf(w, "\n")

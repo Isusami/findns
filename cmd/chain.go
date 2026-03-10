@@ -100,7 +100,7 @@ func buildStep(cfg stepConfig, defaultTimeout, defaultCount int, ports chan int,
 		if !ok || pubkey == "" {
 			return scanner.Step{}, fmt.Errorf("step %q: missing required param 'pubkey'", cfg.name)
 		}
-		testURL := "https://httpbin.org/ip"
+		testURL := "http://httpbin.org/ip"
 		if v, ok := cfg.params["test-url"]; ok {
 			testURL = v
 		}
@@ -113,7 +113,7 @@ func buildStep(cfg stepConfig, defaultTimeout, defaultCount int, ports chan int,
 			return scanner.Step{}, fmt.Errorf("step %q: missing required param 'domain'", cfg.name)
 		}
 		cert := cfg.params["cert"]
-		testURL := "https://httpbin.org/ip"
+		testURL := "http://httpbin.org/ip"
 		if v, ok := cfg.params["test-url"]; ok {
 			testURL = v
 		}
@@ -153,7 +153,7 @@ func buildStep(cfg stepConfig, defaultTimeout, defaultCount int, ports chan int,
 		if !ok || pubkey == "" {
 			return scanner.Step{}, fmt.Errorf("step %q: missing required param 'pubkey'", cfg.name)
 		}
-		testURL := "https://httpbin.org/ip"
+		testURL := "http://httpbin.org/ip"
 		if v, ok := cfg.params["test-url"]; ok {
 			testURL = v
 		}

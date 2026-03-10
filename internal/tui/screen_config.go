@@ -72,7 +72,7 @@ var allFields = []fieldDef{
 	{fE2E, "E2E Testing", "E2E (end-to-end tunnel test)", "Enable end-to-end tunnel tests. Requires tunnel client binaries.", -1},
 	{fPubkey, "Pubkey", "", "Hex public key for dnstt. Requires dnstt-client in PATH.", txtPubkey},
 	{fCert, "Cert", "", "Path to slipstream TLS cert. Requires slipstream-client in PATH.", txtCert},
-	{fTestURL, "Test URL", "", "URL to fetch through the tunnel. Default: https://httpbin.org/ip", txtTestURL},
+	{fTestURL, "Test URL", "", "URL to fetch through the tunnel. Default: http://httpbin.org/ip", txtTestURL},
 	{fProxyAuth, "Proxy Auth", "", "SOCKS proxy credentials (user:pass) for e2e tunnel tests.", txtProxyAuth},
 	{fE2ETimeout, "E2E Timeout (s)", "", "Seconds to wait for each e2e tunnel connectivity test.", txtE2ETimeout},
 	{fStart, "Start Scan", "", "Run the scan with the settings above.", -1},
@@ -111,7 +111,7 @@ func initConfigInputs() []textinput.Model {
 	inputs[txtCert].CharLimit = 512
 
 	inputs[txtTestURL] = textinput.New()
-	inputs[txtTestURL].Placeholder = "https://httpbin.org/ip"
+	inputs[txtTestURL].Placeholder = "http://httpbin.org/ip"
 	inputs[txtTestURL].CharLimit = 512
 
 	inputs[txtProxyAuth] = textinput.New()

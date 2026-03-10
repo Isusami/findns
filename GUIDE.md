@@ -811,7 +811,7 @@ findns scan -i doh-resolvers.txt -o results.json \
 | `--domain` | دامنه تانل (فعال‌سازی تست tunnel/edns) | — |
 | `--pubkey` | کلید عمومی سرور DNSTT (فعال‌سازی تست e2e) | — |
 | `--cert` | مسیر فایل گواهی Slipstream | — |
-| `--test-url` | آدرسی که از طریق تانل تست شود | `https://httpbin.org/ip` |
+| `--test-url` | آدرسی که از طریق تانل تست شود | `http://httpbin.org/ip` |
 | `--proxy-auth` | احراز هویت پروکسی SOCKS به صورت `user:pass` (برای تست e2e) | — |
 | `--doh` | حالت DoH به جای UDP | `false` |
 | `--skip-ping` | رد کردن مرحله ping (مفید اگر ICMP مسدود باشد) | `false` |
@@ -1201,7 +1201,7 @@ findns scan -i resolvers.txt -o results.json \
 dnstt-client -udp 8.8.8.8:53 -pubkey YOUR_KEY t.example.com 127.0.0.1:1080 &
 
 # صبر کنید 3 ثانیه، بعد:
-curl -x socks5h://127.0.0.1:1080 https://httpbin.org/ip
+curl -x socks5h://127.0.0.1:1080 http://httpbin.org/ip
 
 # اگر جواب آمد = تانل کار می‌کند
 # اگر timeout شد = مشکل از سرور یا resolver
@@ -1314,7 +1314,7 @@ https://dns.quad9.net/dns-query
 | `--timeout` | `-t` | تایم‌اوت هر تلاش (ثانیه) | `3` |
 | `--count` | `-c` | تعداد تلاش برای هر IP | `3` |
 | `--workers` | — | تعداد workerهای موازی | `50` |
-| `--e2e-timeout` | — | تایم‌اوت تست‌های e2e (ثانیه) | `10` |
+| `--e2e-timeout` | — | تایم‌اوت تست‌های e2e (ثانیه) | `20` |
 | `--include-failed` | — | IPهای فیل‌شده از ورودی JSON را هم اسکن کن | `false` |
 
 **تنظیم workers:**

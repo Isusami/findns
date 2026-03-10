@@ -20,7 +20,7 @@ var e2eDnsttCmd = &cobra.Command{
 func init() {
 	e2eDnsttCmd.Flags().String("domain", "", "DNSTT tunnel domain")
 	e2eDnsttCmd.Flags().String("pubkey", "", "DNSTT server public key")
-	e2eDnsttCmd.Flags().String("test-url", "https://httpbin.org/ip", "URL to fetch through tunnel")
+	e2eDnsttCmd.Flags().String("test-url", "http://httpbin.org/ip", "URL to fetch through tunnel")
 	e2eDnsttCmd.Flags().String("proxy-auth", "", "SOCKS proxy auth as user:pass")
 	e2eDnsttCmd.MarkFlagRequired("domain")
 	e2eDnsttCmd.MarkFlagRequired("pubkey")

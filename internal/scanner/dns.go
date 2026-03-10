@@ -3,6 +3,7 @@ package scanner
 import (
 	"context"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/miekg/dns"
@@ -152,27 +153,102 @@ func QueryNSMulti(domain string, timeout time.Duration) ([]string, bool) {
 }
 
 func QueryNS(resolver, domain string, timeout time.Duration) ([]string, bool) {
+	// Strategy 1: direct NS query — works when the recursive resolver returns
+	// the delegation NS in Answer or Authority.
 	r, ok := queryRaw(resolver, domain, dns.TypeNS, timeout)
-	if !ok {
-		return nil, false
-	}
-	var hosts []string
-	// Check Answer section first
-	for _, ans := range r.Answer {
-		if ns, ok := ans.(*dns.NS); ok {
-			hosts = append(hosts, ns.Ns)
-		}
-	}
-	// For subdomain delegations, NS records are often in the Authority section
-	if len(hosts) == 0 {
-		for _, ans := range r.Ns {
+	if ok {
+		var hosts []string
+		for _, ans := range r.Answer {
 			if ns, ok := ans.(*dns.NS); ok {
 				hosts = append(hosts, ns.Ns)
 			}
 		}
+		if len(hosts) == 0 {
+			for _, ans := range r.Ns {
+				if ns, ok := ans.(*dns.NS); ok {
+					hosts = append(hosts, ns.Ns)
+				}
+			}
+		}
+		if len(hosts) > 0 {
+			return hosts, true
+		}
 	}
-	if len(hosts) == 0 {
+
+	// Strategy 2: query the parent zone's authoritative nameservers directly.
+	// For "t.example.com", find NS of "example.com", then ask those servers
+	// for NS of "t.example.com".  This is how subdomain delegation actually
+	// works in the DNS hierarchy.
+	parent := parentZone(domain)
+	if parent == "" {
 		return nil, false
 	}
-	return hosts, true
+	// Get parent zone NS from the resolver
+	pr, pok := queryRaw(resolver, parent, dns.TypeNS, timeout)
+	if !pok {
+		return nil, false
+	}
+	var parentNS []string
+	for _, ans := range pr.Answer {
+		if ns, ok := ans.(*dns.NS); ok {
+			parentNS = append(parentNS, ns.Ns)
+		}
+	}
+	if len(parentNS) == 0 {
+		return nil, false
+	}
+
+	// Resolve the first parent NS to an IP and query it directly
+	for _, nsHost := range parentNS {
+		nsHost = strings.TrimSuffix(nsHost, ".")
+		// Resolve the NS hostname to an IP via the same resolver
+		ar, aok := queryRaw(resolver, nsHost, dns.TypeA, timeout)
+		if !aok {
+			continue
+		}
+		var nsIP string
+		for _, ans := range ar.Answer {
+			if a, ok := ans.(*dns.A); ok {
+				nsIP = a.A.String()
+				break
+			}
+		}
+		if nsIP == "" {
+			continue
+		}
+		// Ask the parent's authoritative NS for the subdomain's NS records
+		dr, dok := queryRaw(nsIP, domain, dns.TypeNS, timeout)
+		if !dok {
+			continue
+		}
+		var hosts []string
+		for _, ans := range dr.Answer {
+			if ns, ok := ans.(*dns.NS); ok {
+				hosts = append(hosts, ns.Ns)
+			}
+		}
+		if len(hosts) == 0 {
+			for _, ans := range dr.Ns {
+				if ns, ok := ans.(*dns.NS); ok {
+					hosts = append(hosts, ns.Ns)
+				}
+			}
+		}
+		if len(hosts) > 0 {
+			return hosts, true
+		}
+	}
+	return nil, false
+}
+
+// parentZone returns the parent zone of a domain.
+// e.g. "t.example.com" → "example.com", "example.com" → "com"
+// Returns "" if the domain has no parent (is a TLD or empty).
+func parentZone(domain string) string {
+	domain = strings.TrimSuffix(domain, ".")
+	parts := strings.SplitN(domain, ".", 2)
+	if len(parts) < 2 || parts[1] == "" {
+		return ""
+	}
+	return parts[1]
 }

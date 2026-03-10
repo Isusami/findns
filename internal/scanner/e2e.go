@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-const defaultTestURL = "https://httpbin.org/ip"
+const defaultTestURL = "http://httpbin.org/ip"
 
 func PortPool(base, count int) chan int {
 	ch := make(chan int, count)
@@ -360,4 +360,129 @@ func truncate(s string, maxLen int) string {
 		return s[:maxLen] + "..."
 	}
 	return s
+}
+
+// preflightResolvers are tried in order for the e2e preflight check.
+// Uses the same list as nsResolvers in dns.go for maximum coverage.
+var preflightResolvers = []string{
+	"8.8.8.8",         // Google
+	"1.1.1.1",         // Cloudflare
+	"9.9.9.9",         // Quad9
+	"208.67.222.222",  // OpenDNS
+	"76.76.2.0",       // ControlD
+	"94.140.14.14",    // AdGuard
+	"185.228.168.9",   // CleanBrowsing
+	"76.76.19.19",     // Alternate DNS
+	"149.112.112.112", // Quad9 secondary
+	"8.26.56.26",      // Comodo Secure
+	"156.154.70.1",    // Neustar/UltraDNS
+	"178.22.122.100",  // Shecan (Iran)
+	"185.51.200.2",    // DNS.sb (anycast)
+	"195.175.39.39",   // Turk Telekom (Turkey)
+	"80.80.80.80",     // Freenom/Level3 (Turkey/EU)
+	"217.218.127.127", // TCI (Iran)
+	"85.132.75.12",    // AzOnline (Azerbaijan)
+	"213.42.20.20",    // Etisalat DNS (UAE)
+}
+
+// PreflightE2EResult holds the outcome of a preflight e2e test.
+type PreflightE2EResult struct {
+	OK       bool
+	Resolver string // which resolver worked (or last tried)
+	Stderr   string // dnstt-client stderr on failure
+	Err      string // human-readable error
+}
+
+// PreflightE2E runs e2e tunnel tests against multiple resolvers in parallel.
+// Returns as soon as any one resolver succeeds. If all fail within the timeout,
+// returns an error. This handles blocked resolvers (e.g. Google in Iran) by
+// racing them — whichever resolver is reachable responds first.
+func PreflightE2E(bin, domain, pubkey, testURL, proxyAuth string, timeout time.Duration) PreflightE2EResult {
+	if testURL == "" {
+		testURL = defaultTestURL
+	}
+
+	// Each parallel test needs its own port
+	basePort := 29900
+	results := make(chan PreflightE2EResult, len(preflightResolvers))
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	for i, resolver := range preflightResolvers {
+		go func(res string, port int) {
+			r := preflightSingle(bin, res, domain, pubkey, testURL, proxyAuth, port, timeout)
+			results <- r
+		}(resolver, basePort+i)
+	}
+
+	// Wait for first success or all failures
+	failures := 0
+	for {
+		select {
+		case r := <-results:
+			if r.OK {
+				cancel() // stop remaining goroutines
+				return r
+			}
+			failures++
+			if failures >= len(preflightResolvers) {
+				return PreflightE2EResult{
+					OK:  false,
+					Err: "tunnel test failed via all resolvers — dnstt-server may not be running, or all resolvers are blocked in your region",
+				}
+			}
+		case <-ctx.Done():
+			return PreflightE2EResult{
+				OK:  false,
+				Err: "tunnel preflight timed out — dnstt-server may not be running, or resolvers are blocked in your region",
+			}
+		}
+	}
+}
+
+func preflightSingle(bin, resolver, domain, pubkey, testURL, proxyAuth string, port int, timeout time.Duration) PreflightE2EResult {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	var stderrBuf bytes.Buffer
+	cmd := execCommandContext(ctx, bin,
+		"-udp", net.JoinHostPort(resolver, "53"),
+		"-pubkey", pubkey,
+		domain,
+		fmt.Sprintf("127.0.0.1:%d", port))
+	cmd.Stdout = io.Discard
+	cmd.Stderr = &stderrBuf
+
+	if err := cmd.Start(); err != nil {
+		return PreflightE2EResult{Resolver: resolver, Err: fmt.Sprintf("cannot start %s: %v", bin, err)}
+	}
+
+	exited := make(chan struct{})
+	go func() {
+		cmd.Wait()
+		close(exited)
+	}()
+
+	// cleanup: kill process and wait for exit before returning
+	cleanup := func() {
+		cmd.Process.Kill()
+		select {
+		case <-exited:
+		case <-time.After(2 * time.Second):
+		}
+	}
+
+	if waitAndTestSOCKS(ctx, port, testURL, proxyAuth, exited, timeout) {
+		cleanup()
+		return PreflightE2EResult{OK: true, Resolver: resolver}
+	}
+
+	// Kill and wait to safely read stderr
+	cleanup()
+	stderr := strings.TrimSpace(stderrBuf.String())
+	if stderr != "" {
+		return PreflightE2EResult{Resolver: resolver, Stderr: truncate(stderr, 300), Err: "dnstt-client error: " + truncate(stderr, 200)}
+	}
+	return PreflightE2EResult{Resolver: resolver, Err: fmt.Sprintf("tunnel via %s: no HTTP response within %v", resolver, timeout)}
 }

@@ -248,7 +248,7 @@ findns scan -i resolvers.txt -o results.json --domain t.example.com
 | `--domain` | Tunnel domain (enables tunnel/e2e steps) | — |
 | `--pubkey` | DNSTT server public key (enables e2e test) | — |
 | `--cert` | Slipstream cert path (enables Slipstream e2e) | — |
-| `--test-url` | URL to fetch through tunnel for e2e test | `https://httpbin.org/ip` |
+| `--test-url` | URL to fetch through tunnel for e2e test | `http://httpbin.org/ip` |
 | `--proxy-auth` | SOCKS proxy auth as `user:pass` (for e2e tests) | — |
 | `--doh` | Scan DoH resolvers instead of UDP | `false` |
 | `--edns` | Include EDNS payload size check | `false` |
@@ -481,7 +481,7 @@ Step format: `type:key=val,key=val`. Optional params: `count`, `timeout`.
 | `--timeout` | `-t` | Timeout per attempt (seconds) | 3 |
 | `--count` | `-c` | Attempts per IP/URL | 3 |
 | `--workers` | | Concurrent workers | 50 |
-| `--e2e-timeout` | | Timeout for e2e tests (seconds) | 10 |
+| `--e2e-timeout` | | Timeout for e2e tests (seconds) | 20 |
 | `--include-failed` | | Also scan failed entries from JSON input | false |
 
 ---
@@ -876,7 +876,7 @@ findns tui
 | `--domain` | دامنه تانل (فعال‌سازی تست تانل/e2e) | — |
 | `--pubkey` | کلید عمومی سرور DNSTT (فعال‌سازی تست e2e) | — |
 | `--cert` | مسیر گواهی Slipstream (فعال‌سازی تست Slipstream) | — |
-| `--test-url` | آدرس برای تست اتصال e2e | `https://httpbin.org/ip` |
+| `--test-url` | آدرس برای تست اتصال e2e | `http://httpbin.org/ip` |
 | `--proxy-auth` | احراز هویت پروکسی SOCKS به صورت `user:pass` (برای تست e2e) | — |
 | `--doh` | اسکن DoH به جای UDP | `false` |
 | `--edns` | فعال‌سازی تست سایز EDNS payload | `false` |
@@ -1164,7 +1164,7 @@ findns chain -i doh-resolvers.txt -o result.json \
 | `--timeout` | `-t` | تایم‌اوت هر تلاش (ثانیه) | 3 |
 | `--count` | `-c` | تعداد تلاش برای هر IP/URL | 3 |
 | `--workers` | | تعداد workerهای موازی | 50 |
-| `--e2e-timeout` | | تایم‌اوت تست‌های e2e (ثانیه) | 10 |
+| `--e2e-timeout` | | تایم‌اوت تست‌های e2e (ثانیه) | 20 |
 | `--include-failed` | | اسکن IPهای فیل‌شده از ورودی JSON | false |
 
 ---
