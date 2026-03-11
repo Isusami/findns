@@ -497,7 +497,11 @@ func binaryStatus(domain, pubkey, testURL, proxyAuth string) string {
 			r := e2eCache.result
 			e2eCache.mu.Unlock()
 			if r.OK {
-				b.WriteString(fmt.Sprintf("      %s  %s\n", greenStyle.Render("✔"), dimStyle.Render("Tunnel preflight → connected via "+r.Resolver)))
+				via := r.Resolver
+				if r.DoH {
+					via += " (DoH)"
+				}
+				b.WriteString(fmt.Sprintf("      %s  %s\n", greenStyle.Render("✔"), dimStyle.Render("Tunnel preflight → connected via "+via)))
 			} else {
 				b.WriteString(fmt.Sprintf("      %s  %s\n", redStyle.Render("✘"), redStyle.Render("Tunnel preflight FAILED")))
 			}

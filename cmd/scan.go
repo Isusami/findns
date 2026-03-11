@@ -262,8 +262,12 @@ func printPreFlight(ipCount int, domain, pubkey, testURL, proxyAuth, dnsttBin, s
 		preflightTimeout := time.Duration(e2eTimeout) * time.Second
 		result := scanner.PreflightE2E(dnsttBin, domain, pubkey, testURL, proxyAuth, preflightTimeout)
 		if result.OK {
+			via := result.Resolver
+			if result.DoH {
+				via += " (DoH)"
+			}
 			fmt.Fprintf(w, "\r\033[2K\033[A\033[2K    %s\u2714%s Tunnel preflight: %sconnected via %s%s\n",
-				colorGreen, colorReset, colorGreen, result.Resolver, colorReset)
+				colorGreen, colorReset, colorGreen, via, colorReset)
 		} else {
 			fmt.Fprintf(w, "\r\033[2K\033[A\033[2K    %s\u2718%s Tunnel preflight: %sFAILED — %s%s\n",
 				colorRed, colorReset, colorRed, result.Err, colorReset)

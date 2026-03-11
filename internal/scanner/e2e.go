@@ -362,33 +362,46 @@ func truncate(s string, maxLen int) string {
 	return s
 }
 
-// preflightResolvers are tried in order for the e2e preflight check.
-// Uses the same list as nsResolvers in dns.go for maximum coverage.
-var preflightResolvers = []string{
-	"8.8.8.8",         // Google
-	"1.1.1.1",         // Cloudflare
-	"9.9.9.9",         // Quad9
-	"208.67.222.222",  // OpenDNS
-	"76.76.2.0",       // ControlD
-	"94.140.14.14",    // AdGuard
-	"185.228.168.9",   // CleanBrowsing
-	"76.76.19.19",     // Alternate DNS
-	"149.112.112.112", // Quad9 secondary
-	"8.26.56.26",      // Comodo Secure
-	"156.154.70.1",    // Neustar/UltraDNS
-	"178.22.122.100",  // Shecan (Iran)
-	"185.51.200.2",    // DNS.sb (anycast)
-	"195.175.39.39",   // Turk Telekom (Turkey)
-	"80.80.80.80",     // Freenom/Level3 (Turkey/EU)
-	"217.218.127.127", // TCI (Iran)
-	"85.132.75.12",    // AzOnline (Azerbaijan)
-	"213.42.20.20",    // Etisalat DNS (UAE)
+// preflightResolver describes a single resolver for the preflight check.
+type preflightResolver struct {
+	addr string // IP for UDP, URL for DoH
+	doh  bool   // true = use -doh flag instead of -udp
+	name string // human-readable label
+}
+
+// preflightResolvers: UDP resolvers tried first (fast path), then DoH fallbacks.
+// DoH goes over HTTPS (port 443) which is almost never blocked, even in Iran.
+var preflightResolvers = []preflightResolver{
+	// UDP resolvers — fast path
+	{"8.8.8.8", false, "Google"},
+	{"1.1.1.1", false, "Cloudflare"},
+	{"9.9.9.9", false, "Quad9"},
+	{"208.67.222.222", false, "OpenDNS"},
+	{"76.76.2.0", false, "ControlD"},
+	{"94.140.14.14", false, "AdGuard"},
+	{"185.228.168.9", false, "CleanBrowsing"},
+	{"76.76.19.19", false, "Alternate DNS"},
+	{"149.112.112.112", false, "Quad9 secondary"},
+	{"8.26.56.26", false, "Comodo Secure"},
+	{"156.154.70.1", false, "Neustar/UltraDNS"},
+	{"178.22.122.100", false, "Shecan (Iran)"},
+	{"185.51.200.2", false, "DNS.sb (anycast)"},
+	{"195.175.39.39", false, "Turk Telekom"},
+	{"80.80.80.80", false, "Freenom/Level3"},
+	{"217.218.127.127", false, "TCI (Iran)"},
+	{"85.132.75.12", false, "AzOnline (Azerbaijan)"},
+	{"213.42.20.20", false, "Etisalat DNS (UAE)"},
+	// DoH fallbacks — bypass UDP blocking entirely (port 443)
+	{"https://dns.google/dns-query", true, "Google DoH"},
+	{"https://cloudflare-dns.com/dns-query", true, "Cloudflare DoH"},
+	{"https://dns.sb/dns-query", true, "DNS.sb DoH"},
 }
 
 // PreflightE2EResult holds the outcome of a preflight e2e test.
 type PreflightE2EResult struct {
 	OK       bool
 	Resolver string // which resolver worked (or last tried)
+	DoH      bool   // true if connected via DoH
 	Stderr   string // dnstt-client stderr on failure
 	Err      string // human-readable error
 }
@@ -409,16 +422,17 @@ func PreflightE2EContext(parent context.Context, bin, domain, pubkey, testURL, p
 
 	// Each parallel test needs its own port
 	basePort := 29900
-	results := make(chan PreflightE2EResult, len(preflightResolvers))
+	total := len(preflightResolvers)
+	results := make(chan PreflightE2EResult, total)
 
 	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
 
-	for i, resolver := range preflightResolvers {
-		go func(res string, port int) {
-			r := preflightSingle(ctx, bin, res, domain, pubkey, testURL, proxyAuth, port, timeout)
-			results <- r
-		}(resolver, basePort+i)
+	for i, res := range preflightResolvers {
+		go func(r preflightResolver, port int) {
+			result := preflightSingle(ctx, bin, r, domain, pubkey, testURL, proxyAuth, port, timeout)
+			results <- result
+		}(res, basePort+i)
 	}
 
 	// Wait for first success or all failures
@@ -431,10 +445,10 @@ func PreflightE2EContext(parent context.Context, bin, domain, pubkey, testURL, p
 				return r
 			}
 			failures++
-			if failures >= len(preflightResolvers) {
+			if failures >= total {
 				return PreflightE2EResult{
 					OK:  false,
-					Err: "tunnel test failed via all resolvers — dnstt-server may not be running, or all resolvers are blocked in your region",
+					Err: "tunnel test failed via all resolvers (UDP + DoH) — dnstt-server may not be running, or your network blocks all DNS paths",
 				}
 			}
 		case <-ctx.Done():
@@ -446,21 +460,30 @@ func PreflightE2EContext(parent context.Context, bin, domain, pubkey, testURL, p
 	}
 }
 
-func preflightSingle(parent context.Context, bin, resolver, domain, pubkey, testURL, proxyAuth string, port int, timeout time.Duration) PreflightE2EResult {
+func preflightSingle(parent context.Context, bin string, res preflightResolver, domain, pubkey, testURL, proxyAuth string, port int, timeout time.Duration) PreflightE2EResult {
 	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
 
+	label := res.name
+	if label == "" {
+		label = res.addr
+	}
+
+	// Build dnstt-client args: -doh URL or -udp IP:53
+	var args []string
+	if res.doh {
+		args = []string{"-doh", res.addr, "-pubkey", pubkey, domain, fmt.Sprintf("127.0.0.1:%d", port)}
+	} else {
+		args = []string{"-udp", net.JoinHostPort(res.addr, "53"), "-pubkey", pubkey, domain, fmt.Sprintf("127.0.0.1:%d", port)}
+	}
+
 	var stderrBuf bytes.Buffer
-	cmd := execCommandContext(ctx, bin,
-		"-udp", net.JoinHostPort(resolver, "53"),
-		"-pubkey", pubkey,
-		domain,
-		fmt.Sprintf("127.0.0.1:%d", port))
+	cmd := execCommandContext(ctx, bin, args...)
 	cmd.Stdout = io.Discard
 	cmd.Stderr = &stderrBuf
 
 	if err := cmd.Start(); err != nil {
-		return PreflightE2EResult{Resolver: resolver, Err: fmt.Sprintf("cannot start %s: %v", bin, err)}
+		return PreflightE2EResult{Resolver: label, DoH: res.doh, Err: fmt.Sprintf("cannot start %s: %v", bin, err)}
 	}
 
 	exited := make(chan struct{})
@@ -480,14 +503,14 @@ func preflightSingle(parent context.Context, bin, resolver, domain, pubkey, test
 
 	if waitAndTestSOCKS(ctx, port, testURL, proxyAuth, exited, timeout) {
 		cleanup()
-		return PreflightE2EResult{OK: true, Resolver: resolver}
+		return PreflightE2EResult{OK: true, Resolver: label, DoH: res.doh}
 	}
 
 	// Kill and wait to safely read stderr
 	cleanup()
 	stderr := strings.TrimSpace(stderrBuf.String())
 	if stderr != "" {
-		return PreflightE2EResult{Resolver: resolver, Stderr: truncate(stderr, 300), Err: "dnstt-client error: " + truncate(stderr, 200)}
+		return PreflightE2EResult{Resolver: label, DoH: res.doh, Stderr: truncate(stderr, 300), Err: "dnstt-client error: " + truncate(stderr, 200)}
 	}
-	return PreflightE2EResult{Resolver: resolver, Err: fmt.Sprintf("tunnel via %s: no HTTP response within %v", resolver, timeout)}
+	return PreflightE2EResult{Resolver: label, DoH: res.doh, Err: fmt.Sprintf("tunnel via %s: no HTTP response within %v", label, timeout)}
 }
