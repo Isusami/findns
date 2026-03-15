@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/SamNet-dev/findns/internal/binutil"
+	"github.com/SamNet-dev/findns/internal/data"
 	"github.com/SamNet-dev/findns/internal/scanner"
 	"github.com/SamNet-dev/findns/internal/tui"
 	"github.com/spf13/cobra"
@@ -57,7 +58,16 @@ func Execute() {
 
 func loadInput() ([]string, error) {
 	if inputFile == "" {
-		return nil, fmt.Errorf("--input / -i flag is required")
+		// No input file — auto-load bundled Iranian resolvers (fully offline)
+		ips, err := data.IRResolvers()
+		if err != nil {
+			return nil, fmt.Errorf("no -i flag and bundled resolvers failed: %w", err)
+		}
+		if len(ips) == 0 {
+			return nil, fmt.Errorf("--input / -i flag is required (bundled resolver list is empty)")
+		}
+		fmt.Fprintf(os.Stderr, "  no -i flag — using %d bundled Iranian resolvers (offline)\n", len(ips))
+		return ips, nil
 	}
 	ips, err := scanner.LoadInput(inputFile, includeFailed)
 	if err != nil {

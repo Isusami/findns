@@ -25,7 +25,11 @@ func RunPool(ips []string, workers int, timeout time.Duration, check CheckFunc, 
 
 func RunPoolCtx(ctx context.Context, ips []string, workers int, timeout time.Duration, check CheckFunc, onProgress ProgressFunc) []Result {
 	jobs := make(chan string)
-	results := make(chan Result, len(ips))
+	bufSize := workers * 4
+	if bufSize > len(ips) {
+		bufSize = len(ips)
+	}
+	results := make(chan Result, bufSize)
 
 	for i := 0; i < workers; i++ {
 		go func() {

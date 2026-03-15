@@ -138,6 +138,11 @@ func viewResults(m Model) string {
 		b.WriteString("\n")
 		b.WriteString(dimStyle.Render(fmt.Sprintf("  Saved to %s", m.config.OutputFile)))
 		b.WriteString("\n")
+		if len(m.report.Passed) > 0 {
+			ipFile := strings.TrimSuffix(m.config.OutputFile, ".json") + "_ips.txt"
+			b.WriteString(dimStyle.Render(fmt.Sprintf("  IP list  %s", ipFile)))
+			b.WriteString("\n")
+		}
 	}
 
 	b.WriteString("\n")

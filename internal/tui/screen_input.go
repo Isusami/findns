@@ -23,6 +23,7 @@ const (
 	inputCIDRFull
 	inputCombinedLight
 	inputCombinedMedium
+	inputCustomCIDR
 	inputCustom
 	numInputChoices
 )
@@ -56,9 +57,13 @@ var inputOptions = []inputOption{
 		desc:  "Resolvers + CIDR medium  (~104K IPs)",
 	},
 	{
+		label: "Custom CIDR",
+		desc:  "Enter a CIDR range to scan (e.g. 5.52.0.0/16)",
+		group: "Custom",
+	},
+	{
 		label: "Custom file",
 		desc:  "Load IPs from a text file or JSON report",
-		group: "Custom",
 	},
 }
 
@@ -66,6 +71,8 @@ func updateInput(m Model, msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case inputLoadedMsg:
 		m.loading = false
+		m.typingCIDR = false
+		m.typingPath = false
 		if msg.err != nil {
 			m.err = msg.err
 			return m, nil
@@ -84,6 +91,26 @@ func updateInput(m Model, msg tea.Msg) (Model, tea.Cmd) {
 		// Block input while loading
 		if m.loading {
 			return m, nil
+		}
+		// If typing custom CIDR
+		if m.typingCIDR {
+			switch msg.String() {
+			case "enter":
+				cidr := m.cidrInput.Value()
+				if cidr == "" {
+					return m, nil
+				}
+				m.typingCIDR = false
+				m.loading = true
+				return m, loadCIDRCustom(cidr)
+			case "esc":
+				m.typingCIDR = false
+				m.err = nil
+				return m, nil
+			}
+			var cmd tea.Cmd
+			m.cidrInput, cmd = m.cidrInput.Update(msg)
+			return m, cmd
 		}
 		// If typing custom path
 		if m.typingPath {
@@ -116,6 +143,13 @@ func updateInput(m Model, msg tea.Msg) (Model, tea.Cmd) {
 				m.cursor++
 			}
 		case "enter":
+			if m.cursor == inputCustomCIDR {
+				m.typingCIDR = true
+				m.cidrInput = textinput.New()
+				m.cidrInput.Placeholder = "5.52.0.0/16"
+				m.cidrInput.Focus()
+				return m, m.cidrInput.Cursor.BlinkCmd()
+			}
 			if m.cursor == inputCustom {
 				m.typingPath = true
 				m.pathInput = textinput.New()
@@ -170,6 +204,16 @@ func viewInput(m Model) string {
 	if m.err != nil {
 		b.WriteString(redStyle.Render(fmt.Sprintf("  Error: %v", m.err)))
 		b.WriteString("\n\n")
+	}
+
+	if m.typingCIDR {
+		b.WriteString(dimStyle.Render("  Enter CIDR range:"))
+		b.WriteString("\n\n")
+		b.WriteString("  " + m.cidrInput.View())
+		b.WriteString("\n\n")
+		b.WriteString(dimStyle.Render("  enter confirm  esc cancel"))
+		b.WriteString("\n")
+		return b.String()
 	}
 
 	if m.typingPath {
@@ -267,6 +311,25 @@ func loadCombined(samplePer int) tea.Cmd {
 			}
 		}
 		return inputLoadedMsg{ips: combined}
+	}
+}
+
+func loadCIDRCustom(cidr string) tea.Cmd {
+	return func() tea.Msg {
+		cidrs := []string{cidr}
+		totalUsable, err := data.TotalUsableIPs(cidrs)
+		if err != nil {
+			return inputLoadedMsg{err: fmt.Errorf("invalid CIDR %q: %w", cidr, err)}
+		}
+		const maxCIDRExpand = 1_000_000
+		if totalUsable > maxCIDRExpand {
+			return inputLoadedMsg{err: fmt.Errorf("CIDR %s has %d IPs (max %d) — use CIDR scan options for large ranges", cidr, totalUsable, maxCIDRExpand)}
+		}
+		ips, err := data.ExpandCIDRsSampled(cidrs, 0) // 0 = all IPs
+		if err != nil {
+			return inputLoadedMsg{err: fmt.Errorf("invalid CIDR %q: %w", cidr, err)}
+		}
+		return inputLoadedMsg{ips: ips}
 	}
 }
 

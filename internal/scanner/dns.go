@@ -9,13 +9,18 @@ import (
 	"github.com/miekg/dns"
 )
 
+// EDNSBufSize is the EDNS0 UDP payload size advertised in queries.
+// Larger values allow bigger DNS responses (better tunnel throughput).
+// Default 1232 is safe for most networks; lower if you hit fragmentation.
+var EDNSBufSize uint16 = 1232
+
 // queryRaw sends a DNS query and handles EDNS0 + TCP fallback on truncation.
 // Returns the response regardless of Rcode, so callers can inspect Authority section.
 func queryRaw(resolver, domain string, qtype uint16, timeout time.Duration) (*dns.Msg, bool) {
 	m := new(dns.Msg)
 	m.SetQuestion(dns.Fqdn(domain), qtype)
 	m.RecursionDesired = true
-	m.SetEdns0(1232, false)
+	m.SetEdns0(EDNSBufSize, false)
 
 	addr := net.JoinHostPort(resolver, "53")
 
@@ -112,57 +117,6 @@ func QueryA(resolver, domain string, timeout time.Duration) bool {
 		return false
 	}
 	return len(r.Answer) > 0
-}
-
-// nsResolvers is the list of public DNS resolvers used for NS delegation checks.
-// Multiple are needed because some may be blocked or unreachable in certain regions.
-var nsResolvers = []string{
-	// Global providers
-	"8.8.8.8",         // Google
-	"1.1.1.1",         // Cloudflare
-	"9.9.9.9",         // Quad9
-	"208.67.222.222",  // OpenDNS
-	"76.76.2.0",       // ControlD
-	"94.140.14.14",    // AdGuard
-	"185.228.168.9",   // CleanBrowsing
-	"76.76.19.19",     // Alternate DNS
-	"149.112.112.112", // Quad9 secondary
-	"8.26.56.26",      // Comodo Secure
-	"156.154.70.1",    // Neustar/UltraDNS
-	// Regional (Middle East / Central Asia)
-	"178.22.122.100",  // Shecan (Iran)
-	"185.51.200.2",    // DNS.sb (anycast, good in ME)
-	"195.175.39.39",   // Turk Telekom (Turkey)
-	"80.80.80.80",     // Freenom/Level3 (Turkey/EU)
-	"217.218.127.127", // TCI (Iran)
-	// Regional (Caucasus / nearby)
-	"85.132.75.12",    // AzOnline (Azerbaijan)
-	"213.42.20.20",    // Etisalat DNS (UAE)
-}
-
-// QueryNSMulti tries all resolvers in parallel and returns the first successful result.
-// Overall deadline is the per-resolver timeout (first responder wins).
-func QueryNSMulti(domain string, timeout time.Duration) ([]string, bool) {
-	type nsResult struct {
-		hosts []string
-		ok    bool
-	}
-	ch := make(chan nsResult, len(nsResolvers))
-	for _, resolver := range nsResolvers {
-		go func(r string) {
-			hosts, ok := QueryNS(r, domain, timeout)
-			ch <- nsResult{hosts, ok && len(hosts) > 0}
-		}(resolver)
-	}
-	failures := 0
-	for range nsResolvers {
-		res := <-ch
-		if res.ok {
-			return res.hosts, true
-		}
-		failures++
-	}
-	return nil, false
 }
 
 func QueryNS(resolver, domain string, timeout time.Duration) ([]string, bool) {

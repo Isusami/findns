@@ -66,10 +66,14 @@ func buildSteps(cfg ScanConfig) ([]scanner.Step, error) {
 	}
 
 	if cfg.DoH {
-		steps = append(steps, scanner.Step{
-			Name: "doh/resolve", Timeout: dur,
-			Check: scanner.DoHResolveCheck("google.com", cfg.Count), SortBy: "resolve_ms",
-		})
+		// When domain is set, skip basic resolve (A record for google.com) —
+		// tunnel domains have no A record. Go straight to resolve/tunnel.
+		if cfg.Domain == "" {
+			steps = append(steps, scanner.Step{
+				Name: "doh/resolve", Timeout: dur,
+				Check: scanner.DoHResolveCheck("google.com", cfg.Count), SortBy: "resolve_ms",
+			})
+		}
 		if cfg.Domain != "" {
 			steps = append(steps, scanner.Step{
 				Name: "doh/resolve/tunnel", Timeout: dur,
@@ -89,10 +93,12 @@ func buildSteps(cfg ScanConfig) ([]scanner.Step, error) {
 				Check: scanner.PingCheck(cfg.Count), SortBy: "ping_ms",
 			})
 		}
-		steps = append(steps, scanner.Step{
-			Name: "resolve", Timeout: dur,
-			Check: scanner.ResolveCheck("google.com", cfg.Count), SortBy: "resolve_ms",
-		})
+		if cfg.Domain == "" {
+			steps = append(steps, scanner.Step{
+				Name: "resolve", Timeout: dur,
+				Check: scanner.ResolveCheck("google.com", cfg.Count), SortBy: "resolve_ms",
+			})
+		}
 		if !cfg.SkipNXDomain {
 			steps = append(steps, scanner.Step{
 				Name: "nxdomain", Timeout: dur,
@@ -128,6 +134,11 @@ func buildSteps(cfg ScanConfig) ([]scanner.Step, error) {
 }
 
 func launchScan(ctx context.Context, ips []string, cfg ScanConfig, steps []scanner.Step, progressCh chan progressMsg, doneCh chan scanDoneMsg) {
+	// Apply EDNS buffer size before scanning
+	if cfg.EDNSSize > 0 {
+		scanner.EDNSBufSize = uint16(cfg.EDNSSize)
+	}
+
 	if len(steps) == 0 {
 		doneCh <- scanDoneMsg{err: fmt.Errorf("no scan steps configured")}
 		close(progressCh)
@@ -167,7 +178,7 @@ func launchScan(ctx context.Context, ips []string, cfg ScanConfig, steps []scann
 		if cfg.OutputFile != "" {
 			writeErr = scanner.WriteChainReport(report, cfg.OutputFile)
 			// Also write plain IP list alongside JSON
-			if writeErr == nil {
+			if writeErr == nil && len(report.Passed) > 0 {
 				ipFile := strings.TrimSuffix(cfg.OutputFile, ".json") + "_ips.txt"
 				_ = scanner.WriteIPList(report.Passed, ipFile)
 			}

@@ -30,6 +30,7 @@ type ScanConfig struct {
 	Timeout      int
 	Count        int
 	E2ETimeout   int
+	EDNSSize     int
 	SkipPing     bool
 	SkipNXDomain bool
 	EDNS         bool
@@ -50,10 +51,12 @@ type Model struct {
 	cliInput  textinput.Model
 
 	// Input screen
-	ips        []string
-	loading    bool
-	typingPath bool
-	pathInput  textinput.Model
+	ips         []string
+	loading     bool
+	typingPath  bool
+	pathInput   textinput.Model
+	typingCIDR  bool
+	cidrInput   textinput.Model
 
 	// Config screen
 	config       ScanConfig
@@ -93,6 +96,9 @@ func NewModelWithConfig(cfg ScanConfig) Model {
 	if cfg.E2ETimeout <= 0 {
 		cfg.E2ETimeout = 15
 	}
+	if cfg.EDNSSize <= 0 {
+		cfg.EDNSSize = 1232
+	}
 
 	inputs := initConfigInputs()
 
@@ -118,6 +124,7 @@ func NewModelWithConfig(cfg ScanConfig) Model {
 	inputs[txtWorkers].SetValue(fmt.Sprintf("%d", cfg.Workers))
 	inputs[txtTimeout].SetValue(fmt.Sprintf("%d", cfg.Timeout))
 	inputs[txtCount].SetValue(fmt.Sprintf("%d", cfg.Count))
+	inputs[txtEDNSSize].SetValue(fmt.Sprintf("%d", cfg.EDNSSize))
 	inputs[txtE2ETimeout].SetValue(fmt.Sprintf("%d", cfg.E2ETimeout))
 
 	return Model{
@@ -156,7 +163,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case screenRunning:
 				return updateRunning(m, msg)
 			case screenInput:
-				if !m.typingPath {
+				if !m.typingPath && !m.typingCIDR {
 					return m, tea.Quit
 				}
 			// Config screen: let 'q' pass to text inputs

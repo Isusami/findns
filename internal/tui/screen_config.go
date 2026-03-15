@@ -1,15 +1,11 @@
 package tui
 
 import (
-	"context"
 	"fmt"
 	"strconv"
 	"strings"
-	"sync"
-	"time"
 
 	"github.com/SamNet-dev/findns/internal/binutil"
-	"github.com/SamNet-dev/findns/internal/scanner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -26,6 +22,7 @@ const (
 	txtWorkers
 	txtTimeout
 	txtCount
+	txtEDNSSize
 	txtE2ETimeout
 	numTextInputs
 )
@@ -42,6 +39,7 @@ const (
 	fSkipPing
 	fSkipNXD
 	fEDNS
+	fEDNSSize
 	fE2E       // toggle: enables/disables e2e section
 	fPubkey    // e2e fields below
 	fCert
@@ -70,6 +68,7 @@ var allFields = []fieldDef{
 	{fSkipPing, "Skip Ping", "Options", "Skip ICMP ping step. Useful if your network blocks outbound ping.", -1},
 	{fSkipNXD, "Skip NXDOMAIN", "", "Skip NXDOMAIN hijack detection. Checks if resolver fakes responses.", -1},
 	{fEDNS, "EDNS Check", "", "Test EDNS0 payload size support. Important for DNS tunneling throughput.", -1},
+	{fEDNSSize, "EDNS Size", "", "EDNS0 UDP payload size in bytes. Larger = better throughput, lower if fragmented.", txtEDNSSize},
 	{fE2E, "E2E Testing", "E2E (end-to-end tunnel test)", "Enable end-to-end tunnel tests. Requires tunnel client binaries.", -1},
 	{fPubkey, "Pubkey", "", "Hex public key for dnstt. Requires dnstt-client in PATH.", txtPubkey},
 	{fCert, "Cert", "", "Path to slipstream TLS cert. Requires slipstream-client in PATH.", txtCert},
@@ -138,6 +137,11 @@ func initConfigInputs() []textinput.Model {
 	inputs[txtCount].Placeholder = "3"
 	inputs[txtCount].SetValue("3")
 	inputs[txtCount].CharLimit = 3
+
+	inputs[txtEDNSSize] = textinput.New()
+	inputs[txtEDNSSize].Placeholder = "1232"
+	inputs[txtEDNSSize].SetValue("1232")
+	inputs[txtEDNSSize].CharLimit = 4
 
 	inputs[txtE2ETimeout] = textinput.New()
 	inputs[txtE2ETimeout].Placeholder = "15"
@@ -279,6 +283,9 @@ func applyConfig(m Model) (Model, tea.Cmd) {
 	if v, err := strconv.Atoi(m.configInputs[txtCount].Value()); err == nil && v > 0 {
 		m.config.Count = v
 	}
+	if v, err := strconv.Atoi(m.configInputs[txtEDNSSize].Value()); err == nil && v > 0 {
+		m.config.EDNSSize = v
+	}
 	if v, err := strconv.Atoi(m.configInputs[txtE2ETimeout].Value()); err == nil && v > 0 {
 		m.config.E2ETimeout = v
 	}
@@ -365,11 +372,7 @@ func viewConfig(m Model) string {
 
 		// Show binary status after E2E toggle when enabled
 		if fd.id == fE2E && m.config.E2E {
-			domain := strings.TrimSpace(m.configInputs[txtDomain].Value())
-			pubkey := strings.TrimSpace(m.configInputs[txtPubkey].Value())
-			testURL := strings.TrimSpace(m.configInputs[txtTestURL].Value())
-			proxyAuth := strings.TrimSpace(m.configInputs[txtProxyAuth].Value())
-			b.WriteString(binaryStatus(domain, pubkey, testURL, proxyAuth))
+			b.WriteString(binaryStatus())
 		}
 	}
 
@@ -400,29 +403,7 @@ func getToggleValue(m Model, id fieldID) bool {
 	return false
 }
 
-// nsCache stores the cached NS delegation check result to avoid
-// re-querying on every TUI render. The check runs in a goroutine
-// so it never blocks View().
-var nsCache struct {
-	mu      sync.Mutex
-	domain  string
-	hosts   []string
-	ok      bool
-	done    bool
-	loading bool
-}
-
-// e2eCache stores the cached preflight e2e check result.
-var e2eCache struct {
-	mu       sync.Mutex
-	key      string // "domain|pubkey" — invalidate if either changes
-	result   scanner.PreflightE2EResult
-	done     bool
-	loading  bool
-	cancel   context.CancelFunc // cancels in-flight preflight when key changes
-}
-
-func binaryStatus(domain, pubkey, testURL, proxyAuth string) string {
+func binaryStatus() string {
 	var b strings.Builder
 	bins := []struct {
 		name string
@@ -432,99 +413,12 @@ func binaryStatus(domain, pubkey, testURL, proxyAuth string) string {
 		{"slipstream-client", "slipstream-client"},
 		{"curl", "curl"},
 	}
-	var dnsttBin string
 	for _, bin := range bins {
 		path, err := binutil.Find(bin.bin)
 		if err != nil {
 			b.WriteString(fmt.Sprintf("      %s  %s\n", redStyle.Render("✘"), dimStyle.Render(bin.name+" not found")))
 		} else {
 			b.WriteString(fmt.Sprintf("      %s  %s\n", greenStyle.Render("✔"), dimStyle.Render(bin.name+" → "+path)))
-			if bin.bin == "dnstt-client" {
-				dnsttBin = path
-			}
-		}
-	}
-	// Verify NS delegation if domain is set (non-blocking)
-	if domain != "" {
-		nsCache.mu.Lock()
-		if nsCache.domain != domain {
-			nsCache.done = false
-			nsCache.loading = false
-		}
-		if nsCache.done {
-			hosts, ok := nsCache.hosts, nsCache.ok
-			nsCache.mu.Unlock()
-			if ok && len(hosts) > 0 {
-				b.WriteString(fmt.Sprintf("      %s  %s\n", greenStyle.Render("✔"), dimStyle.Render("NS delegation → "+hosts[0])))
-			} else {
-				b.WriteString(fmt.Sprintf("      %s  %s\n", redStyle.Render("✘"), redStyle.Render("NS delegation NOT found for "+domain)))
-			}
-		} else if !nsCache.loading {
-			nsCache.loading = true
-			nsCache.domain = domain
-			nsCache.mu.Unlock()
-			go func(d string) {
-				hosts, ok := scanner.QueryNSMulti(d, 5*time.Second)
-				nsCache.mu.Lock()
-				if nsCache.domain == d {
-					nsCache.hosts = hosts
-					nsCache.ok = ok
-					nsCache.done = true
-					nsCache.loading = false
-				}
-				nsCache.mu.Unlock()
-			}(domain)
-			b.WriteString(fmt.Sprintf("      %s  %s\n", dimStyle.Render("…"), dimStyle.Render("Checking NS delegation...")))
-		} else {
-			nsCache.mu.Unlock()
-			b.WriteString(fmt.Sprintf("      %s  %s\n", dimStyle.Render("…"), dimStyle.Render("Checking NS delegation...")))
-		}
-	}
-	// Preflight e2e tunnel check (non-blocking, parallel)
-	if dnsttBin != "" && domain != "" && pubkey != "" {
-		cacheKey := domain + "|" + pubkey
-		e2eCache.mu.Lock()
-		if e2eCache.key != cacheKey {
-			// Cancel any in-flight preflight for the old key
-			if e2eCache.cancel != nil {
-				e2eCache.cancel()
-				e2eCache.cancel = nil
-			}
-			e2eCache.done = false
-			e2eCache.loading = false
-		}
-		if e2eCache.done {
-			r := e2eCache.result
-			e2eCache.mu.Unlock()
-			if r.OK {
-				via := r.Resolver
-				if r.DoH {
-					via += " (DoH)"
-				}
-				b.WriteString(fmt.Sprintf("      %s  %s\n", greenStyle.Render("✔"), dimStyle.Render("Tunnel preflight → connected via "+via)))
-			} else {
-				b.WriteString(fmt.Sprintf("      %s  %s\n", redStyle.Render("✘"), redStyle.Render("Tunnel preflight FAILED")))
-			}
-		} else if !e2eCache.loading {
-			e2eCache.loading = true
-			e2eCache.key = cacheKey
-			ctx, cancel := context.WithCancel(context.Background())
-			e2eCache.cancel = cancel
-			e2eCache.mu.Unlock()
-			go func(ctx context.Context, bin, d, pk, tu, pa, key string) {
-				r := scanner.PreflightE2EContext(ctx, bin, d, pk, tu, pa, 20*time.Second)
-				e2eCache.mu.Lock()
-				if e2eCache.key == key {
-					e2eCache.result = r
-					e2eCache.done = true
-					e2eCache.loading = false
-				}
-				e2eCache.mu.Unlock()
-			}(ctx, dnsttBin, domain, pubkey, testURL, proxyAuth, cacheKey)
-			b.WriteString(fmt.Sprintf("      %s  %s\n", dimStyle.Render("…"), dimStyle.Render("Testing tunnel connectivity...")))
-		} else {
-			e2eCache.mu.Unlock()
-			b.WriteString(fmt.Sprintf("      %s  %s\n", dimStyle.Render("…"), dimStyle.Render("Testing tunnel connectivity...")))
 		}
 	}
 	return b.String()

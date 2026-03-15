@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/SamNet-dev/findns/internal/data"
 	"github.com/SamNet-dev/findns/internal/scanner"
 	"github.com/spf13/cobra"
 )
@@ -64,6 +65,8 @@ func init() {
 	scanCmd.Flags().Bool("skip-ping", false, "skip ICMP ping step")
 	scanCmd.Flags().Bool("skip-nxdomain", false, "skip NXDOMAIN hijack check")
 	scanCmd.Flags().Bool("edns", false, "include EDNS payload size check (filters resolvers that don't support EDNS)")
+	scanCmd.Flags().Int("edns-size", 1232, "EDNS0 UDP payload size in bytes (default 1232, lower if fragmented)")
+	scanCmd.Flags().StringSlice("cidr", nil, "CIDR range(s) to scan (e.g. --cidr 5.52.0.0/16)")
 	scanCmd.Flags().String("output-ips", "", "write plain IP list (one per line) to this file")
 	scanCmd.Flags().Int("top", 10, "number of top results to display")
 	rootCmd.AddCommand(scanCmd)
@@ -82,13 +85,50 @@ func runScan(cmd *cobra.Command, args []string) error {
 	topN, _ := cmd.Flags().GetInt("top")
 	outputIPs, _ := cmd.Flags().GetString("output-ips")
 
-	if outputFile == "" {
-		return fmt.Errorf("--output / -o flag is required")
+	ednsSize, _ := cmd.Flags().GetInt("edns-size")
+	cidrRanges, _ := cmd.Flags().GetStringSlice("cidr")
+
+	// Apply EDNS buffer size
+	if ednsSize > 0 && ednsSize <= 65535 {
+		scanner.EDNSBufSize = uint16(ednsSize)
+	} else if ednsSize > 65535 {
+		return fmt.Errorf("--edns-size must be <= 65535 (got %d)", ednsSize)
 	}
 
-	ips, err := loadInput()
-	if err != nil {
-		return err
+	if outputFile == "" {
+		outputFile = "results.json"
+		fmt.Fprintf(os.Stderr, "  no -o flag — results will be saved to %s\n", outputFile)
+	}
+
+	var ips []string
+	if len(cidrRanges) > 0 {
+		if inputFile != "" {
+			fmt.Fprintf(os.Stderr, "  warning: --cidr overrides -i flag — ignoring %s\n", inputFile)
+		}
+		// Check total size before expanding to prevent OOM on huge ranges
+		totalUsable, err := data.TotalUsableIPs(cidrRanges)
+		if err != nil {
+			return fmt.Errorf("expanding CIDR ranges: %w", err)
+		}
+		const maxCIDRExpand = 1_000_000
+		if totalUsable > maxCIDRExpand {
+			return fmt.Errorf("--cidr expands to %d IPs (max %d) — use 'findns local --discover' for large ranges", totalUsable, maxCIDRExpand)
+		}
+		expanded, err := data.ExpandCIDRsSampled(cidrRanges, 0) // 0 = all IPs
+		if err != nil {
+			return fmt.Errorf("expanding CIDR ranges: %w", err)
+		}
+		if len(expanded) == 0 {
+			return fmt.Errorf("CIDR range(s) produced no usable IPs")
+		}
+		fmt.Fprintf(os.Stderr, "  --cidr: expanded %d range(s) to %d IPs\n", len(cidrRanges), len(expanded))
+		ips = expanded
+	} else {
+		var err error
+		ips, err = loadInput()
+		if err != nil {
+			return err
+		}
 	}
 
 	// Pre-flight: verify required binaries before wasting time scanning
@@ -123,10 +163,15 @@ func runScan(cmd *cobra.Command, args []string) error {
 	var steps []scanner.Step
 
 	if dohMode {
-		steps = append(steps, scanner.Step{
-			Name: "doh/resolve", Timeout: dur,
-			Check: scanner.DoHResolveCheck("google.com", count), SortBy: "resolve_ms",
-		})
+		// When domain is set, skip basic resolve (A record test for google.com) —
+		// tunnel domains have no A record. Go straight to resolve/tunnel which
+		// tests random subdomain TXT forwarding (the actual tunnel mechanism).
+		if domain == "" {
+			steps = append(steps, scanner.Step{
+				Name: "doh/resolve", Timeout: dur,
+				Check: scanner.DoHResolveCheck("google.com", count), SortBy: "resolve_ms",
+			})
+		}
 		if domain != "" {
 			steps = append(steps, scanner.Step{
 				Name: "doh/resolve/tunnel", Timeout: dur,
@@ -146,10 +191,15 @@ func runScan(cmd *cobra.Command, args []string) error {
 				Check: scanner.PingCheck(count), SortBy: "ping_ms",
 			})
 		}
-		steps = append(steps, scanner.Step{
-			Name: "resolve", Timeout: dur,
-			Check: scanner.ResolveCheck("google.com", count), SortBy: "resolve_ms",
-		})
+		// When domain is set, skip basic resolve (A record for google.com) —
+		// tunnel domains have no A record, so ResolveCheck would falsely
+		// eliminate every resolver. Go straight to resolve/tunnel instead.
+		if domain == "" {
+			steps = append(steps, scanner.Step{
+				Name: "resolve", Timeout: dur,
+				Check: scanner.ResolveCheck("google.com", count), SortBy: "resolve_ms",
+			})
+		}
 		if !skipNXD {
 			steps = append(steps, scanner.Step{
 				Name: "nxdomain", Timeout: dur,
@@ -187,7 +237,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 	}
 
 	printBanner(len(ips), dohMode, domain, steps)
-	printPreFlight(len(ips), domain, pubkey, testURL, proxyAuth, dnsttBin, slipstreamBin, steps)
+	printPreFlight(len(ips), domain, dnsttBin, slipstreamBin, steps)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
@@ -206,7 +256,11 @@ func runScan(cmd *cobra.Command, args []string) error {
 	if err := scanner.WriteChainReport(report, outputFile); err != nil {
 		return err
 	}
-	if outputIPs != "" {
+	// Auto-generate _ips.txt alongside JSON (same as TUI behavior)
+	if outputIPs == "" && len(report.Passed) > 0 {
+		outputIPs = strings.TrimSuffix(outputFile, ".json") + "_ips.txt"
+	}
+	if outputIPs != "" && len(report.Passed) > 0 {
 		if err := scanner.WriteIPList(report.Passed, outputIPs); err != nil {
 			return fmt.Errorf("writing IP list: %w", err)
 		}
@@ -226,54 +280,23 @@ func hline(left, fill, right string, width int) string {
 	return left + strings.Repeat(fill, width) + right
 }
 
-func printPreFlight(ipCount int, domain, pubkey, testURL, proxyAuth, dnsttBin, slipstreamBin string, steps []scanner.Step) {
+func printPreFlight(ipCount int, domain, dnsttBin, slipstreamBin string, steps []scanner.Step) {
 	if !isTTY() {
 		return
 	}
 	w := os.Stderr
 	fmt.Fprintf(w, "  %sPre-flight:%s\n", colorBold, colorReset)
-	fmt.Fprintf(w, "    %s\u2714%s %d resolvers loaded\n", colorGreen, colorReset, ipCount)
-	fmt.Fprintf(w, "    %s\u2714%s %d workers\n", colorGreen, colorReset, workers)
-	fmt.Fprintf(w, "    %s\u2714%s %d scan steps configured\n", colorGreen, colorReset, len(steps))
+	fmt.Fprintf(w, "    %s✔%s %d resolvers loaded\n", colorGreen, colorReset, ipCount)
+	fmt.Fprintf(w, "    %s✔%s %d workers\n", colorGreen, colorReset, workers)
+	fmt.Fprintf(w, "    %s✔%s %d scan steps configured\n", colorGreen, colorReset, len(steps))
 	if dnsttBin != "" {
-		fmt.Fprintf(w, "    %s\u2714%s dnstt-client: %s%s%s\n", colorGreen, colorReset, colorDim, dnsttBin, colorReset)
+		fmt.Fprintf(w, "    %s✔%s dnstt-client: %s%s%s\n", colorGreen, colorReset, colorDim, dnsttBin, colorReset)
 	}
 	if slipstreamBin != "" {
-		fmt.Fprintf(w, "    %s\u2714%s slipstream-client: %s%s%s\n", colorGreen, colorReset, colorDim, slipstreamBin, colorReset)
+		fmt.Fprintf(w, "    %s✔%s slipstream-client: %s%s%s\n", colorGreen, colorReset, colorDim, slipstreamBin, colorReset)
 	}
 	if domain != "" {
-		nsHosts, nsOK := scanner.QueryNSMulti(domain, 5*time.Second)
-		if nsOK && len(nsHosts) > 0 {
-			fmt.Fprintf(w, "    %s\u2714%s Domain: %s%s%s — NS delegation verified\n",
-				colorGreen, colorReset, colorCyan, domain, colorReset)
-			for _, ns := range nsHosts {
-				fmt.Fprintf(w, "        %s%s%s\n", colorDim, ns, colorReset)
-			}
-		} else {
-			fmt.Fprintf(w, "    %s\u2718%s Domain: %s%s%s — %sNS delegation NOT found!%s\n",
-				colorRed, colorReset, colorCyan, domain, colorReset, colorRed, colorReset)
-			fmt.Fprintf(w, "      %sTunnel/e2e steps will likely fail. Verify your DNS setup:%s\n", colorDim, colorReset)
-			fmt.Fprintf(w, "      %sdig NS %s @8.8.8.8  (or check your registrar/Cloudflare dashboard)%s\n", colorDim, domain, colorReset)
-		}
-	}
-	// Preflight e2e: test tunnel connectivity with a known-good resolver
-	if dnsttBin != "" && domain != "" && pubkey != "" {
-		fmt.Fprintf(w, "    %s…%s Tunnel preflight: testing dnstt-server connectivity...\n", colorDim, colorReset)
-		preflightTimeout := time.Duration(e2eTimeout) * time.Second
-		result := scanner.PreflightE2E(dnsttBin, domain, pubkey, testURL, proxyAuth, preflightTimeout)
-		if result.OK {
-			via := result.Resolver
-			if result.DoH {
-				via += " (DoH)"
-			}
-			fmt.Fprintf(w, "\r\033[2K\033[A\033[2K    %s\u2714%s Tunnel preflight: %sconnected via %s%s\n",
-				colorGreen, colorReset, colorGreen, via, colorReset)
-		} else {
-			fmt.Fprintf(w, "\r\033[2K\033[A\033[2K    %s\u2718%s Tunnel preflight: %sFAILED — %s%s\n",
-				colorRed, colorReset, colorRed, result.Err, colorReset)
-			fmt.Fprintf(w, "      %sYour dnstt-server may not be running or is misconfigured.%s\n", colorDim, colorReset)
-			fmt.Fprintf(w, "      %sThe e2e step will likely produce 0 results.%s\n", colorDim, colorReset)
-		}
+		fmt.Fprintf(w, "    %s✔%s Domain: %s%s%s\n", colorGreen, colorReset, colorCyan, domain, colorReset)
 	}
 	fmt.Fprintf(w, "\n")
 }

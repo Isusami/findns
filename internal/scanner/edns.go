@@ -13,7 +13,16 @@ import (
 // This is critical for DNSTT — larger payloads = faster tunnel.
 // Tests sizes 512, 900, 1232 and reports the largest that works.
 func EDNSCheck(domain string, count int) CheckFunc {
-	payloads := []int{512, 900, 1232}
+	// Build test payloads up to the configured buffer size
+	var payloads []int
+	for _, p := range []int{512, 900, 1232, 1452, 4096} {
+		if p <= int(EDNSBufSize) {
+			payloads = append(payloads, p)
+		}
+	}
+	if len(payloads) == 0 || payloads[len(payloads)-1] != int(EDNSBufSize) {
+		payloads = append(payloads, int(EDNSBufSize))
+	}
 
 	return func(ip string, timeout time.Duration) (bool, Metrics) {
 		bestPayload := 0

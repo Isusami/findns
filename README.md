@@ -25,6 +25,7 @@ Supports both **UDP** and **DoH (DNS-over-HTTPS)** resolvers with end-to-end tun
 | 📋 **JSON Pipeline** | Output from one scan feeds into the next for multi-stage filtering |
 | 🌐 **CIDR Input** | Accept IP ranges like `185.51.200.0/24` — auto-expanded to individual hosts |
 | 🖥️ **Interactive TUI** | Full terminal UI with guided setup — no flags to remember |
+| 🔌 **Fully Offline** | Zero-config: auto-loads bundled resolvers, no `-i` or `-o` needed |
 
 ---
 
@@ -165,6 +166,20 @@ findns tui
 
 Launches a full terminal UI that guides you through mode selection, resolver input, and scan configuration. No flags needed — just follow the prompts.
 
+### 0️⃣ Zero-Config Offline Scan (Easiest)
+
+No flags needed — findns auto-loads 7,800+ bundled Iranian resolvers and saves to `results.json`:
+
+```bash
+# Scan with just a domain — everything else is automatic
+findns scan --domain t.example.com
+
+# With e2e verification
+findns scan --domain t.example.com --pubkey <hex-pubkey>
+```
+
+> No `-i` flag? Uses bundled resolvers. No `-o` flag? Saves to `results.json`. Also auto-generates `results_ips.txt` with a plain IP list.
+
 ### 1️⃣ Get Resolver Lists
 
 ```bash
@@ -177,6 +192,8 @@ findns fetch -o resolvers.txt --local
 # 🔒 Download DoH resolver URLs
 findns fetch -o doh-resolvers.txt --doh
 ```
+
+> If the online download fails (e.g. GitHub is blocked), `fetch` automatically falls back to bundled resolvers — no internet needed.
 
 ### 2️⃣ Run Full Scan
 
@@ -195,11 +212,20 @@ findns scan -i doh-resolvers.txt -o results.json \
 # 🔒 DoH scan with e2e verification
 findns scan -i doh-resolvers.txt -o results.json \
   --domain t.example.com --pubkey <hex-pubkey> --doh
+
+# 🌐 Scan a specific CIDR range directly (no input file needed)
+findns scan --cidr 5.52.0.0/16 --domain t.example.com
+
+# 🌐 Scan multiple CIDR ranges
+findns scan --cidr 5.52.0.0/16 --cidr 185.51.200.0/24 --domain t.example.com
+
+# 📏 Custom EDNS buffer size (lower if you hit fragmentation)
+findns scan --domain t.example.com --edns --edns-size 900
 ```
 
 ### 3️⃣ Check Results
 
-Results are saved as JSON. The `passed` array contains resolvers that survived all steps, sorted by performance:
+Results are saved as JSON with an auto-generated `_ips.txt` companion file. The `passed` array contains resolvers that survived all steps, sorted by performance:
 
 ```json
 {
@@ -237,11 +263,15 @@ A guided terminal interface for the full scan workflow. No flags or files needed
 Automatically chains the right scan steps based on your flags. This is the **recommended** way to use the scanner.
 
 ```bash
-findns scan -i resolvers.txt -o results.json --domain t.example.com
+findns scan --domain t.example.com
 ```
 
-**UDP mode pipeline:** `ping → resolve → nxdomain → tunnel → e2e` (add `--edns` for EDNS payload check)
-**DoH mode pipeline:** `doh/resolve → doh/tunnel → doh/e2e`
+> `-i` and `-o` are optional. Without `-i`, bundled Iranian resolvers are used. Without `-o`, results save to `results.json`.
+
+**UDP mode pipeline:** `ping → nxdomain → resolve/tunnel → e2e` (add `--edns` for EDNS payload check)
+**DoH mode pipeline:** `doh/resolve/tunnel → doh/e2e`
+
+> When `--domain` is set, the basic `resolve` step (A record for google.com) is skipped — tunnel domains have no A record, so findns goes straight to `resolve/tunnel`.
 
 | Flag | Description | Default |
 |------|-------------|---------|
@@ -252,9 +282,12 @@ findns scan -i resolvers.txt -o results.json --domain t.example.com
 | `--proxy-auth` | SOCKS proxy auth as `user:pass` (for e2e tests) | — |
 | `--doh` | Scan DoH resolvers instead of UDP | `false` |
 | `--edns` | Include EDNS payload size check | `false` |
+| `--edns-size` | EDNS0 UDP payload size in bytes (larger = better throughput) | `1232` |
+| `--cidr` | Scan a CIDR range directly (e.g. `--cidr 5.52.0.0/16`) | — |
 | `--skip-ping` | Skip ICMP ping step | `false` |
 | `--skip-nxdomain` | Skip NXDOMAIN hijack check | `false` |
 | `--top` | Number of top results to display | `10` |
+| `--output-ips` | Write plain IP list alongside JSON | auto |
 
 ---
 
@@ -363,13 +396,16 @@ findns nxdomain -i resolvers.txt -o result.json
 
 ### 📏 `edns` — EDNS Payload Size Test
 
-Tests which EDNS buffer sizes a resolver supports. Larger payloads = faster DNS tunnel. Tests 512, 900, and 1232 bytes.
+Tests which EDNS buffer sizes a resolver supports. Larger payloads = faster DNS tunnel. Tests progressively larger sizes up to the configured `--edns-size` (default 1232).
 
 ```bash
 findns edns -i resolvers.txt -o result.json --domain t.example.com
+
+# Test with larger buffer (e.g. 4096 bytes)
+findns edns -i resolvers.txt -o result.json --domain t.example.com --edns-size 4096
 ```
 
-📊 **Metric:** `edns_max` (largest working payload: 512, 900, or 1232)
+📊 **Metric:** `edns_max` (largest working payload size in bytes)
 
 ---
 
@@ -476,8 +512,9 @@ Step format: `type:key=val,key=val`. Optional params: `count`, `timeout`.
 
 | Flag | Short | Description | Default |
 |------|-------|-------------|---------|
-| `--input` | `-i` | Input file (text or JSON) | required |
-| `--output` | `-o` | Output JSON file | required |
+| `--input` | `-i` | Input file (text or JSON). If omitted, uses 7,800+ bundled Iranian resolvers | bundled list |
+| `--output` | `-o` | Output JSON file | `results.json` |
+| `--output-ips` | | Also write a plain IP list (one per line) | auto when `-o` is set |
 | `--timeout` | `-t` | Timeout per attempt (seconds) | 3 |
 | `--count` | `-c` | Attempts per IP/URL | 3 |
 | `--workers` | | Concurrent workers | 50 |
@@ -610,6 +647,7 @@ MIT
 | 📋 **خروجی JSON** | خروجی هر اسکن ورودی اسکن بعدی می‌شود |
 | 🌐 **ورودی CIDR** | رنج آی‌پی مثل `185.51.200.0/24` را می‌خواند و به صورت خودکار باز می‌کند |
 | 🖥️ **رابط کاربری ترمینال (TUI)** | رابط تعاملی کامل — بدون نیاز به حفظ فلگ‌ها |
+| 🔌 **کاملاً آفلاین** | بدون تنظیم: resolverهای داخلی خودکار بارگذاری می‌شوند، نیازی به `-i` یا `-o` نیست |
 
 ---
 
@@ -782,6 +820,24 @@ findns tui
 
 یک رابط کاربری ترمینال کامل باز می‌شود که شما را قدم به قدم راهنمایی می‌کند: انتخاب حالت (UDP/DoH)، انتخاب لیست ریزالور، تنظیمات اسکن، و مشاهده نتایج. نیازی به فلگ نیست — فقط دنبال کنید.
 
+### 0️⃣ اسکن آفلاین بدون تنظیم (ساده‌ترین)
+
+بدون نیاز به هیچ فلگ اضافه — findns به صورت خودکار 7,800+ resolver ایرانی داخلی را بارگذاری می‌کند و نتایج را در `results.json` ذخیره می‌کند:
+
+</div>
+
+```bash
+# فقط با دامنه اسکن کنید — بقیه خودکار است
+findns scan --domain t.example.com
+
+# با تست e2e
+findns scan --domain t.example.com --pubkey <hex-pubkey>
+```
+
+<div dir="rtl">
+
+> بدون `-i`؟ از resolverهای داخلی استفاده می‌شود. بدون `-o`؟ در `results.json` ذخیره می‌شود. فایل `results_ips.txt` هم خودکار ساخته می‌شود.
+
 ### 1️⃣ دریافت لیست Resolverها
 
 </div>
@@ -798,6 +854,8 @@ findns fetch -o doh-resolvers.txt --doh
 ```
 
 <div dir="rtl">
+
+> اگر دانلود آنلاین شکست بخورد (مثلاً GitHub فیلتر باشد)، `fetch` به صورت خودکار از resolverهای داخلی استفاده می‌کند — نیازی به اینترنت نیست.
 
 ### 2️⃣ اجرای اسکن کامل
 
@@ -818,13 +876,22 @@ findns scan -i doh-resolvers.txt -o results.json \
 # 🔒 اسکن DoH با تست واقعی e2e
 findns scan -i doh-resolvers.txt -o results.json \
   --domain t.example.com --pubkey <hex-pubkey> --doh
+
+# 🌐 اسکن مستقیم یک رنج CIDR (بدون نیاز به فایل ورودی)
+findns scan --cidr 5.52.0.0/16 --domain t.example.com
+
+# 🌐 اسکن چند رنج CIDR
+findns scan --cidr 5.52.0.0/16 --cidr 185.51.200.0/24 --domain t.example.com
+
+# 📏 تنظیم سایز بافر EDNS (کمتر کنید اگر فرگمنتیشن دارید)
+findns scan --domain t.example.com --edns --edns-size 900
 ```
 
 <div dir="rtl">
 
 ### 3️⃣ بررسی نتایج
 
-نتایج به صورت JSON ذخیره می‌شوند. آرایه `passed` شامل resolverهایی است که تمام مراحل را با موفقیت گذرانده‌اند:
+نتایج به صورت JSON ذخیره می‌شوند (+ فایل `_ips.txt` خودکار). آرایه `passed` شامل resolverهایی است که تمام مراحل را با موفقیت گذرانده‌اند:
 
 </div>
 
@@ -868,8 +935,10 @@ findns tui
 
 به صورت خودکار مراحل مناسب را بر اساس فلگ‌ها ترتیب می‌دهد.
 
-**حالت UDP:** `ping → resolve → nxdomain → tunnel → e2e` (با `--edns` مرحله EDNS اضافه می‌شود)
-**حالت DoH:** `doh/resolve → doh/tunnel → doh/e2e`
+**حالت UDP:** `ping → nxdomain → resolve/tunnel → e2e` (با `--edns` مرحله EDNS اضافه می‌شود)
+**حالت DoH:** `doh/resolve/tunnel → doh/e2e`
+
+> وقتی `--domain` تنظیم شود، مرحله `resolve` ساده (رکورد A برای google.com) رد می‌شود — دامنه‌های تانل رکورد A ندارند، بنابراین findns مستقیم به `resolve/tunnel` می‌رود.
 
 | فلگ | توضیح | پیش‌فرض |
 |-----|-------|---------|
@@ -880,9 +949,12 @@ findns tui
 | `--proxy-auth` | احراز هویت پروکسی SOCKS به صورت `user:pass` (برای تست e2e) | — |
 | `--doh` | اسکن DoH به جای UDP | `false` |
 | `--edns` | فعال‌سازی تست سایز EDNS payload | `false` |
+| `--edns-size` | سایز بافر EDNS0 به بایت (بزرگتر = سرعت بیشتر) | `1232` |
+| `--cidr` | اسکن مستقیم رنج CIDR (مثلاً `--cidr 5.52.0.0/16`) | — |
 | `--skip-ping` | رد کردن مرحله ping | `false` |
 | `--skip-nxdomain` | رد کردن بررسی هایجک | `false` |
 | `--top` | تعداد نتایج برتر برای نمایش | `10` |
+| `--output-ips` | خروجی لیست آی‌پی ساده کنار JSON | خودکار |
 
 ---
 
@@ -1014,17 +1086,20 @@ findns nxdomain -i resolvers.txt -o result.json
 
 ### 📏 `edns` — تست سایز Payload EDNS
 
-تست اینکه resolver چه اندازه بافر EDNS را پشتیبانی می‌کند. payload بزرگتر = تانل DNS سریعتر. سایزهای 512، 900 و 1232 بایت تست می‌شوند.
+تست اینکه resolver چه اندازه بافر EDNS را پشتیبانی می‌کند. payload بزرگتر = تانل DNS سریعتر. سایزهای مختلف تا مقدار `--edns-size` (پیش‌فرض 1232) تست می‌شوند.
 
 </div>
 
 ```bash
 findns edns -i resolvers.txt -o result.json --domain t.example.com
+
+# تست با بافر بزرگتر (مثلاً 4096 بایت)
+findns edns -i resolvers.txt -o result.json --domain t.example.com --edns-size 4096
 ```
 
 <div dir="rtl">
 
-📊 **متریک:** `edns_max` (بزرگترین payload کارآمد: 512، 900 یا 1232)
+📊 **متریک:** `edns_max` (بزرگترین سایز payload کارآمد به بایت)
 
 ---
 
@@ -1159,8 +1234,9 @@ findns chain -i doh-resolvers.txt -o result.json \
 
 | فلگ | مخفف | توضیح | پیش‌فرض |
 |-----|------|-------|---------|
-| `--input` | `-i` | فایل ورودی (متن یا JSON) | الزامی |
-| `--output` | `-o` | فایل خروجی JSON | الزامی |
+| `--input` | `-i` | فایل ورودی (متن یا JSON). اگر داده نشود، از 7,800+ resolver ایرانی داخلی استفاده می‌شود | لیست داخلی |
+| `--output` | `-o` | فایل خروجی JSON | `results.json` |
+| `--output-ips` | | خروجی لیست آی‌پی ساده (هر خط یک آی‌پی) | خودکار وقتی `-o` تنظیم شود |
 | `--timeout` | `-t` | تایم‌اوت هر تلاش (ثانیه) | 3 |
 | `--count` | `-c` | تعداد تلاش برای هر IP/URL | 3 |
 | `--workers` | | تعداد workerهای موازی | 50 |

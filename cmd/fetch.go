@@ -119,6 +119,12 @@ func runFetch(cmd *cobra.Command, args []string) error {
 			fmt.Fprintf(os.Stderr, "  +%d resolvers\n", added)
 		}
 
+		// Auto-fallback: if no resolvers loaded (online failed or returned empty), use bundled list
+		if !localMode && len(entries) == 0 {
+			fmt.Fprintf(os.Stderr, "\n  online fetch failed — falling back to bundled Iranian resolvers (no internet needed)\n")
+			localMode = true
+		}
+
 		// Add known Iranian resolvers from bundled list
 		if localMode {
 			localIPs, err := data.IRResolvers()
