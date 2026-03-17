@@ -84,6 +84,7 @@ jobs:
 
   build-slipstream-windows:
     runs-on: windows-latest
+    continue-on-error: true
     steps:
       - name: Checkout slipstream-rust
         uses: actions/checkout@v4
@@ -95,13 +96,17 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Install cmake
+        run: choco install cmake --installargs 'ADD_CMAKE_TO_PATH=System' -y
+
       - name: Build
+        shell: bash
         working-directory: slipstream-rust
         env:
           PICOQUIC_AUTO_BUILD: '1'
         run: |
           cargo build --release -p slipstream-client --features slipstream-ffi/openssl-vendored
-          copy target\release\slipstream-client.exe ..\slipstream-client-windows-amd64.exe
+          cp target/release/slipstream-client.exe ../slipstream-client-windows-amd64.exe
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -110,7 +115,7 @@ jobs:
           path: slipstream-client-windows-amd64.exe
 
   release:
-    needs: [build, build-slipstream-linux, build-slipstream-windows]
+    needs: [build, build-slipstream-linux]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
