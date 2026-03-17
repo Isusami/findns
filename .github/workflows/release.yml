@@ -50,8 +50,51 @@ jobs:
           name: findns-${{ matrix.suffix }}
           path: findns-${{ matrix.suffix }}
 
+  build-slipstream:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-musl
+            suffix: slipstream-client-linux-amd64
+          - target: aarch64-unknown-linux-musl
+            suffix: slipstream-client-linux-arm64
+          - target: x86_64-pc-windows-gnu
+            suffix: slipstream-client-windows-amd64.exe
+
+    steps:
+      - name: Checkout slipstream-rust
+        uses: actions/checkout@v4
+        with:
+          repository: Mygod/slipstream-rust
+          path: slipstream-rust
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross-compile deps
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y musl-tools gcc-aarch64-linux-gnu gcc-mingw-w64-x86-64
+
+      - name: Build slipstream-client
+        working-directory: slipstream-rust
+        run: |
+          cargo build --release --target ${{ matrix.target }} -p slipstream-client
+          BIN=target/${{ matrix.target }}/release/slipstream-client
+          [ -f "${BIN}.exe" ] && BIN="${BIN}.exe"
+          cp "$BIN" ../${{ matrix.suffix }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.suffix }}
+          path: ${{ matrix.suffix }}
+
   release:
-    needs: build
+    needs: [build, build-slipstream]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
