@@ -55,12 +55,12 @@ jobs:
     strategy:
       matrix:
         include:
-          - target: x86_64-unknown-linux-musl
+          - target: x86_64-unknown-linux-gnu
             suffix: slipstream-client-linux-amd64
-          - target: aarch64-unknown-linux-musl
-            suffix: slipstream-client-linux-arm64
+            deps: libssl-dev
           - target: x86_64-pc-windows-gnu
             suffix: slipstream-client-windows-amd64.exe
+            deps: gcc-mingw-w64-x86-64
 
     steps:
       - name: Checkout slipstream-rust
@@ -77,12 +77,16 @@ jobs:
       - name: Install cross-compile deps
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y musl-tools gcc-aarch64-linux-gnu gcc-mingw-w64-x86-64
+          sudo apt-get install -y ${{ matrix.deps }}
 
       - name: Build slipstream-client
         working-directory: slipstream-rust
+        env:
+          OPENSSL_STATIC: '1'
+          CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER: x86_64-w64-mingw32-gcc
+          PKG_CONFIG_ALLOW_CROSS: '1'
         run: |
-          cargo build --release --target ${{ matrix.target }} -p slipstream-client
+          cargo build --release --target ${{ matrix.target }} -p slipstream-client --features openssl/vendored
           BIN=target/${{ matrix.target }}/release/slipstream-client
           [ -f "${BIN}.exe" ] && BIN="${BIN}.exe"
           cp "$BIN" ../${{ matrix.suffix }}
