@@ -126,9 +126,11 @@ go install www.bamsoftware.com/git/dnstt.git/dnstt-client@latest
 
 `slipstream-client` کلاینت پروژه [Slipstream](https://github.com/Mygod/slipstream-rust) است. مشابه DNSTT ولی با پروتکل متفاوت.
 
-**دانلود:** از [صفحه Release پروژه Slipstream](https://github.com/Mygod/slipstream-rust/releases) باینری مناسب سیستم خود را دانلود کنید (فایل `windows-x86_64` برای ویندوز، `linux-x86_64` برای لینوکس).
+**دانلود:** از [صفحه Release پروژه findns](https://github.com/SamNet-dev/findns/releases/latest) فایل `slipstream-client-linux-amd64` را دانلود کنید.
 
-محل قرارگیری: مثل dnstt-client — فایل `slipstream-client.exe` (ویندوز) یا `slipstream-client` (لینوکس) را کنار findns بگذارید.
+> **توجه:** slipstream-client فقط برای **لینوکس** موجود است. نسخه ویندوز وجود ندارد (پروژه upstream پشتیبانی نمی‌کند). کاربران ویندوز فقط از dnstt استفاده کنند.
+
+محل قرارگیری: فایل `slipstream-client` (لینوکس) را کنار findns بگذارید.
 
 ### کدام resolverها برای dnstt کار می‌کنند؟
 
@@ -208,12 +210,11 @@ TUI شما را قدم به قدم راهنمایی می‌کند:
   - مثال: `9e2bfd5b4e7644f14bbd74a41663e42bfa2a11497b04c88f7bc3d290144f7b37`
   - این کلید را از سرور خود می‌گیرید (فایل `server.pub` یا خروجی دستور راه‌اندازی سرور)
 
-- **Cert Path** — مسیر فایل گواهی TLS سرور Slipstream روی **سیستم خودتان**.
+- **Cert Path** — مسیر فایل گواهی TLS سرور Slipstream روی **سیستم خودتان**. (**فقط لینوکس** — در ویندوز این فیلد نمایش داده نمی‌شود)
   - فقط برای Slipstream لازم است — برای dnstt خالی بگذارید
   - این فایل روی سرور Slipstream شما ساخته می‌شود (معمولاً `cert.pem`)
   - باید یک بار از سرور به سیستم خود کپی کنید (مثلاً با `scp`) و مسیر لوکالش را وارد کنید
-  - مثال ویندوز: `C:\Users\You\Desktop\cert.pem`
-  - مثال لینوکس: `/home/user/cert.pem`
+  - مثال: `/home/user/cert.pem`
 
 - **Query Size** — حداکثر سایز query DNS که dnstt-client می‌فرستد (بایت). پیش‌فرض: خالی (حداکثر ممکن).
   - اگر در ایران همه e2e فیل می‌شوند، مقدار 50 تا 80 را امتحان کنید
@@ -354,7 +355,7 @@ go build -o findns.exe ./cmd
 **نکات ویندوز:**
 - **curl** از قبل در ویندوز 10/11 نصب است
 - اگر ping فیل می‌شود → cmd را **Run as Administrator** باز کنید
-- فایل‌های `dnstt-client.exe` و `slipstream-client.exe` را کنار `findns.exe` بگذارید
+- فایل `dnstt-client.exe` را کنار `findns.exe` بگذارید (slipstream در ویندوز موجود نیست)
 - در PowerShell برای ادامه دستورات طولانی از بک‌تیک `` ` `` استفاده کنید (به جای `\` در لینوکس)
 
 ---
@@ -810,7 +811,7 @@ findns scan -i resolvers.txt -o results.json \
 
 <div dir="rtl">
 
-نیازمند: `slipstream-client` و `curl` در PATH
+نیازمند: `slipstream-client` و `curl` در PATH (فقط لینوکس — slipstream در ویندوز موجود نیست)
 
 ### اسکن DoH
 
@@ -933,7 +934,7 @@ findns edns -i resolvers.txt -o edns-results.json --domain t.example.com --edns-
 
 **۱. سرور تانل فعال:** شما باید یک سرور DNSTT یا Slipstream **از قبل راه‌اندازی کرده باشید** روی یک VPS. بدون سرور، تست e2e نمی‌تواند کار کند چون باید واقعاً به سرور وصل شود.
 
-**۲. باینری کلاینت:** فایل `dnstt-client` یا `slipstream-client` باید کنار findns باشد. (نحوه نصب: [بخش ۱ - dnstt-client چیست؟](#dnstt-client-چیست-و-چطور-نصبش-کنم))
+**۲. باینری کلاینت:** فایل `dnstt-client` باید کنار findns باشد. (نحوه نصب: [بخش ۱ - dnstt-client چیست؟](#dnstt-client-چیست-و-چطور-نصبش-کنم)). برای Slipstream: فقط لینوکس — `slipstream-client` نسخه ویندوز ندارد.
 
 **۳. کلید یا گواهی سرور:**
 
@@ -943,10 +944,11 @@ findns edns -i resolvers.txt -o edns-results.json --domain t.example.com --edns-
 - مثال: `9e2bfd5b4e7644f14bbd74a41663e42bfa2a11497b04c88f7bc3d290144f7b37`
 - ⚠️ فقط محتوای خالص hex — اگر فایل دانلود می‌کنید حتماً Raw بگیرید نه صفحه HTML
 
-برای **Slipstream** — به `--cert` نیاز دارید:
+برای **Slipstream** (فقط لینوکس) — به `--cert` نیاز دارید:
 - فایل `cert.pem` که روی سرور Slipstream ساخته می‌شود
 - باید یک بار از سرور به سیستم خود کپی کنید: `scp user@vps:/path/to/cert.pem ~/cert.pem`
 - سپس مسیر لوکال را به findns بدهید: `--cert /home/user/cert.pem`
+- ⚠️ slipstream-client نسخه ویندوز ندارد — کاربران ویندوز فقط از dnstt استفاده کنند
 
 > **اگر سرور تانل ندارید:** فقط تا مرحله `tunnel` (بررسی NS record) می‌توانید تست کنید. این مرحله بررسی می‌کند resolver **قابلیت** ساپورت تانل را دارد، ولی تضمین واقعی نمی‌دهد. برای تضمین واقعی باید e2e بزنید.
 

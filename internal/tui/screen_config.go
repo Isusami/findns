@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -91,6 +92,10 @@ func visibleFields(cfg ScanConfig) []fieldDef {
 	var out []fieldDef
 	for _, f := range allFields {
 		if e2eSubFields[f.id] && !cfg.E2E {
+			continue
+		}
+		// slipstream-client has no Windows binary — hide Cert field on Windows
+		if f.id == fCert && runtime.GOOS == "windows" {
 			continue
 		}
 		out = append(out, f)
@@ -421,8 +426,14 @@ func binaryStatus() string {
 		bin  string
 	}{
 		{"dnstt-client", "dnstt-client"},
-		{"slipstream-client", "slipstream-client"},
 		{"curl", "curl"},
+	}
+	// slipstream-client only available on Linux/macOS
+	if runtime.GOOS != "windows" {
+		bins = append(bins, struct {
+			name string
+			bin  string
+		}{"slipstream-client", "slipstream-client"})
 	}
 	for _, bin := range bins {
 		path, err := binutil.Find(bin.bin)
