@@ -102,7 +102,7 @@ jobs:
         run: |
           choco install cmake --installargs 'ADD_CMAKE_TO_PATH=System' -y
           # Install MinGW-native OpenSSL via MSYS2 (provides libcrypto.a / libssl.a for MinGW)
-          C:/msys64/usr/bin/pacman -S --noconfirm mingw-w64-x86_64-openssl mingw-w64-x86_64-pkg-config
+          C:/msys64/usr/bin/pacman -S --noconfirm mingw-w64-x86_64-gcc mingw-w64-x86_64-openssl mingw-w64-x86_64-pkg-config
 
       - name: Pre-build picoquic with bash (MSYS2 MinGW)
         shell: bash
