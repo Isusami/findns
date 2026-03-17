@@ -143,8 +143,8 @@ func initConfigInputs() []textinput.Model {
 	inputs[txtQuerySize].CharLimit = 4
 
 	inputs[txtE2ETimeout] = textinput.New()
-	inputs[txtE2ETimeout].Placeholder = "15"
-	inputs[txtE2ETimeout].SetValue("15")
+	inputs[txtE2ETimeout].Placeholder = "30"
+	inputs[txtE2ETimeout].SetValue("30")
 	inputs[txtE2ETimeout].CharLimit = 3
 
 	inputs[txtDomain].Focus()

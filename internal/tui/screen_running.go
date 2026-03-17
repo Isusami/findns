@@ -32,7 +32,7 @@ func buildSteps(cfg ScanConfig) ([]scanner.Step, error) {
 	dur := time.Duration(cfg.Timeout) * time.Second
 	e2eTimeout := cfg.E2ETimeout
 	if e2eTimeout <= 0 {
-		e2eTimeout = 15
+		e2eTimeout = 30
 	}
 	e2eDur := time.Duration(e2eTimeout) * time.Second
 	var steps []scanner.Step

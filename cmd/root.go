@@ -46,7 +46,7 @@ func init() {
 	rootCmd.PersistentFlags().IntVar(&workers, "workers", 50, "concurrent workers")
 	rootCmd.PersistentFlags().IntVarP(&timeout, "timeout", "t", 3, "timeout per attempt in seconds")
 	rootCmd.PersistentFlags().IntVarP(&count, "count", "c", 3, "number of attempts per IP for ping/resolve checks")
-	rootCmd.PersistentFlags().IntVar(&e2eTimeout, "e2e-timeout", 20, "timeout for e2e tunnel tests in seconds")
+	rootCmd.PersistentFlags().IntVar(&e2eTimeout, "e2e-timeout", 30, "timeout for e2e tunnel tests in seconds")
 	rootCmd.SilenceUsage = true
 }
 
