@@ -68,6 +68,7 @@ jobs:
         with:
           repository: Mygod/slipstream-rust
           path: slipstream-rust
+          submodules: recursive
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -77,16 +78,17 @@ jobs:
       - name: Install cross-compile deps
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y ${{ matrix.deps }}
+          sudo apt-get install -y cmake ${{ matrix.deps }}
 
       - name: Build slipstream-client
         working-directory: slipstream-rust
         env:
+          PICOQUIC_AUTO_BUILD: '1'
           OPENSSL_STATIC: '1'
           CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER: x86_64-w64-mingw32-gcc
           PKG_CONFIG_ALLOW_CROSS: '1'
         run: |
-          cargo build --release --target ${{ matrix.target }} -p slipstream-client --features openssl/vendored
+          cargo build --release --target ${{ matrix.target }} -p slipstream-client --features slipstream-ffi/openssl-vendored
           BIN=target/${{ matrix.target }}/release/slipstream-client
           [ -f "${BIN}.exe" ] && BIN="${BIN}.exe"
           cp "$BIN" ../${{ matrix.suffix }}
