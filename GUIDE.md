@@ -136,7 +136,7 @@ go install www.bamsoftware.com/git/dnstt.git/dnstt-client@latest
 
 بدون فلگ `--pubkey` هم findns بررسی می‌کند کدام resolverها **قابلیت** کار با تانل DNS را دارند:
 
-- **resolve/tunnel**: بررسی می‌کند resolver می‌تواند NS record دامنه تانل شما را ببیند
+- **resolve/tunnel**: یک ساب‌دامین رندوم TXT کوئری می‌زند (مثل کاری که dnstt-client می‌کند) و بررسی می‌کند resolver آن را فوروارد می‌کند
 - **edns**: بررسی می‌کند سایز payload بزرگ (1232 بایت) پشتیبانی می‌شود
 - **nxdomain**: بررسی می‌کند resolver جواب جعلی نمی‌دهد
 
@@ -644,8 +644,8 @@ dig t.example.com NS @8.8.8.8
 | اشتباه | نتیجه |
 |--------|-------|
 | استفاده از دامنه اصلی (`--domain example.com`) به جای ساب‌دامین | resolve/tunnel فیل می‌شود چون NS دامنه اصلی به registrar اشاره می‌کند نه سرور شما |
-| فقط A record برای `t.example.com` بدون NS delegation | resolve/tunnel فیل می‌شود چون NS وجود ندارد |
-| NS تنظیم شده ولی سرور DNSTT روشن نیست | resolve/tunnel ممکن است پاس شود (NS وجود دارد) ولی e2e فیل می‌شود |
+| فقط A record برای `t.example.com` بدون NS delegation | resolve/tunnel فیل می‌شود چون کوئری‌ها به سرور شما نمی‌رسند |
+| NS delegation تنظیم شده ولی سرور DNSTT روشن نیست | resolve/tunnel ممکن است پاس شود ولی e2e فیل می‌شود |
 | استفاده از `t.example.com` به صورت واقعی (دامنه تست) | resolve/tunnel فیل می‌شود — باید دامنه خودتان باشد |
 | DNSSEC روشن است در Cloudflare | delegation بدون امضا می‌شود و بعضی resolverها NXDOMAIN برمی‌گردانند |
 | رکورد A برای `ns` روی Proxied (ابر نارنجی) | پورت 53 به سرور نمی‌رسد — باید DNS only (ابر خاکستری) باشد |
@@ -781,7 +781,7 @@ findns scan --domain t.example.com
 - متریک: `edns_max` (بزرگ‌ترین سایز payload کارآمد به بایت)
 - با `--edns-size 4096` سایزهای بزرگتر هم تست می‌شوند
 
-**5. resolve/tunnel** — آیا resolver دامنه تانل شما را می‌بیند؟ NS record و glue A record دامنه تانل را بررسی می‌کند. اگر resolver نتواند دامنه تانل را resolve کند، تانل کار نمی‌کند.
+**5. resolve/tunnel** — آیا resolver کوئری‌های تانل را فوروارد می‌کند؟ یک ساب‌دامین رندوم TXT کوئری می‌زند (دقیقاً مثل dnstt-client) و بررسی می‌کند جوابی برمی‌گردد. NS delegation در DNS registrar لازم است تا کوئری‌ها به سرور شما برسند، ولی خود dnstt-server نیازی به جواب دادن NS ندارد.
 - متریک: `resolve_ms` (میلی‌ثانیه)
 
 ### اسکن با تست واقعی تانل DNSTT (اختیاری)
@@ -888,7 +888,7 @@ findns resolve -i resolvers.txt -o resolve-results.json --domain google.com
 
 <div dir="rtl">
 
-### resolve tunnel - بررسی NS Delegation
+### resolve tunnel - بررسی فوروارد کوئری تانل
 
 </div>
 
@@ -898,7 +898,7 @@ findns resolve tunnel -i resolvers.txt -o tunnel-results.json --domain t.example
 
 <div dir="rtl">
 
-بررسی می‌کند آیا resolver می‌تواند NS record دامنه تانل و glue A record آن را ببیند.
+یک ساب‌دامین رندوم TXT کوئری می‌زند (مثل dnstt-client) و بررسی می‌کند resolver آن را به سرور authoritative فوروارد می‌کند. خود dnstt-server نیازی به جواب دادن NS ندارد — فقط NS delegation در DNS registrar (مثل Cloudflare) لازم است.
 
 ### nxdomain - تشخیص هایجک DNS
 
@@ -951,7 +951,7 @@ findns edns -i resolvers.txt -o edns-results.json --domain t.example.com --edns-
 - سپس مسیر لوکال را به findns بدهید: `--cert /home/user/cert.pem`
 - ⚠️ slipstream-client نسخه ویندوز ندارد — کاربران ویندوز فقط از dnstt استفاده کنند
 
-> **اگر سرور تانل ندارید:** فقط تا مرحله `tunnel` (بررسی NS record) می‌توانید تست کنید. این مرحله بررسی می‌کند resolver **قابلیت** ساپورت تانل را دارد، ولی تضمین واقعی نمی‌دهد. برای تضمین واقعی باید e2e بزنید.
+> **اگر سرور تانل ندارید:** فقط تا مرحله `tunnel` (بررسی فوروارد کوئری) می‌توانید تست کنید. این مرحله بررسی می‌کند resolver **قابلیت** ساپورت تانل را دارد، ولی تضمین واقعی نمی‌دهد. برای تضمین واقعی باید e2e بزنید.
 
 ---
 
@@ -997,7 +997,7 @@ findns doh resolve -i doh-resolvers.txt -o doh-results.json --domain google.com
 
 <div dir="rtl">
 
-### doh resolve tunnel - تست DoH NS Delegation
+### doh resolve tunnel - تست فوروارد کوئری تانل از طریق DoH
 
 </div>
 
