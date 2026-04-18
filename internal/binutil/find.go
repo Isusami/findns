@@ -72,6 +72,8 @@ func Find(name string) (string, error) {
 		hint = "\n\nDownload pre-built binary from findns releases:\n  https://github.com/SamNet-dev/findns/releases/latest\n\nOr install with Go:\n  go install www.bamsoftware.com/git/dnstt.git/dnstt-client@latest"
 	case "slipstream-client":
 		hint = "\n\nDownload from: https://github.com/Mygod/slipstream-rust/releases"
+	case "masterdnsvpn-client":
+		hint = "\n\nDownload pre-built MasterDnsVPN client for your platform from:\n  https://github.com/masterking32/MasterDnsVPN/releases/latest\n\nUnzip the archive and place the binary (e.g. MasterDnsVPN_Client_Linux_AMD64)\nnext to findns, or rename it to 'masterdnsvpn-client' for auto-discovery."
 	}
 
 	pathHelp := fmt.Sprintf("  2. Move it to a folder in PATH:  sudo mv %s /usr/local/bin/\n  3. Or add current directory to PATH:  export PATH=$PATH:$(pwd)", name)

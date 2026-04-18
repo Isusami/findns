@@ -12,20 +12,20 @@ Supports both **UDP** and **DoH (DNS-over-HTTPS)** resolvers with end-to-end tun
 
 ## ✨ Features
 
-| Feature | Description |
-|---------|-------------|
-| 🔄 **UDP + DoH Scanning** | Test both plain DNS (port 53) and DNS-over-HTTPS (port 443) |
-| 🔗 **Full Scan Pipeline** | Ping → Resolve → NXDOMAIN → EDNS → Tunnel → E2E in one command |
-| 🛡️ **Hijack Detection** | Detect DNS resolvers that inject fake answers (NXDOMAIN check) |
-| 📏 **EDNS Payload Testing** | Find resolvers that support large DNS payloads (faster tunnels) |
-| 🚇 **E2E Tunnel Verification** | Actually launches DNSTT/Slipstream clients to verify real connectivity |
-| 📥 **Resolver List Fetcher** | Auto-download thousands of resolvers from public sources |
-| 🌍 **Regional Resolver Lists** | Built-in support for regional intranet resolver lists (7,800+ IPs) |
-| ⚡ **High Concurrency** | 50 parallel workers by default — scans thousands of resolvers in minutes |
-| 📋 **JSON Pipeline** | Output from one scan feeds into the next for multi-stage filtering |
-| 🌐 **CIDR Input** | Accept IP ranges like `185.51.200.0/24` — auto-expanded to individual hosts |
-| 🖥️ **Interactive TUI** | Full terminal UI with guided setup — no flags to remember |
-| 🔌 **Fully Offline** | Zero-config: auto-loads bundled resolvers, no `-i` or `-o` needed |
+| Feature                        | Description                                                                 |
+| ------------------------------ | --------------------------------------------------------------------------- |
+| 🔄 **UDP + DoH Scanning**      | Test both plain DNS (port 53) and DNS-over-HTTPS (port 443)                 |
+| 🔗 **Full Scan Pipeline**      | Ping → Resolve → NXDOMAIN → EDNS → Tunnel → E2E in one command              |
+| 🛡️ **Hijack Detection**        | Detect DNS resolvers that inject fake answers (NXDOMAIN check)              |
+| 📏 **EDNS Payload Testing**    | Find resolvers that support large DNS payloads (faster tunnels)             |
+| 🚇 **E2E Tunnel Verification** | Actually launches DNSTT/Slipstream clients to verify real connectivity      |
+| 📥 **Resolver List Fetcher**   | Auto-download thousands of resolvers from public sources                    |
+| 🌍 **Regional Resolver Lists** | Built-in support for regional intranet resolver lists (7,800+ IPs)          |
+| ⚡ **High Concurrency**        | 50 parallel workers by default — scans thousands of resolvers in minutes    |
+| 📋 **JSON Pipeline**           | Output from one scan feeds into the next for multi-stage filtering          |
+| 🌐 **CIDR Input**              | Accept IP ranges like `185.51.200.0/24` — auto-expanded to individual hosts |
+| 🖥️ **Interactive TUI**         | Full terminal UI with guided setup — no flags to remember                   |
+| 🔌 **Fully Offline**           | Zero-config: auto-loads bundled resolvers, no `-i` or `-o` needed           |
 
 ---
 
@@ -42,12 +42,12 @@ Supports both **UDP** and **DoH (DNS-over-HTTPS)** resolvers with end-to-end tun
 
 ### 🤔 Why DoH Matters
 
-| Transport | Port | Visibility | Restricted Networks |
-|-----------|------|------------|---------------------|
-| 🔴 UDP DNS | 53 | Fully visible to DPI | Monitored, often blocked |
-| 🔴 DoT | 853 | TLS on known port | Often blocked |
-| 🟢 **DoH** | **443** | **Looks like HTTPS** | **Hard to detect** |
-| 🔴 DoQ | 443/UDP | QUIC-based | Often disabled |
+| Transport  | Port    | Visibility           | Restricted Networks      |
+| ---------- | ------- | -------------------- | ------------------------ |
+| 🔴 UDP DNS | 53      | Fully visible to DPI | Monitored, often blocked |
+| 🔴 DoT     | 853     | TLS on known port    | Often blocked            |
+| 🟢 **DoH** | **443** | **Looks like HTTPS** | **Hard to detect**       |
+| 🔴 DoQ     | 443/UDP | QUIC-based           | Often disabled           |
 
 The DNSTT server **always** listens on port 53 — that never changes. But the **client** can talk to the middleman resolver using different transports. DoH wraps DNS queries inside regular HTTPS, making it nearly invisible to firewalls.
 
@@ -85,6 +85,7 @@ chmod +x findns-linux-amd64
 - **Go 1.24+** for building from source
 - **dnstt-client** — only for e2e tunnel tests (`--pubkey`). Install: `go install www.bamsoftware.com/git/dnstt.git/dnstt-client@latest`
 - **slipstream-client** — only for e2e Slipstream tests (`--cert`)
+- **masterdnsvpn-client** — only for e2e MasterDnsVPN tests (`--masterdns-domain`). Download: https://github.com/masterking32/MasterDnsVPN/releases/latest
 - **curl** — for e2e connectivity verification
 
 > **Finding binaries:** findns automatically searches for `dnstt-client` and `slipstream-client` in three places: 1) `PATH` 2) current directory 3) next to the findns executable. The simplest approach: place the binary next to findns.
@@ -147,12 +148,12 @@ Use `.\findns.exe` instead of `findns` in all commands:
 
 ### Common Issues
 
-| Issue | Fix |
-|-------|-----|
-| `ping` shows 0% loss but scan fails | Run as **Administrator** — Windows ICMP requires elevated privileges |
-| `dnstt-client` not found | Place `dnstt-client.exe` next to `findns.exe` or add its folder to PATH |
-| PowerShell blocks execution | Use `cmd.exe` or run `Set-ExecutionPolicy RemoteSigned -Scope CurrentUser` |
-| Long commands break | Use backtick `` ` `` (PowerShell) or `^` (cmd) for line continuation |
+| Issue                               | Fix                                                                        |
+| ----------------------------------- | -------------------------------------------------------------------------- |
+| `ping` shows 0% loss but scan fails | Run as **Administrator** — Windows ICMP requires elevated privileges       |
+| `dnstt-client` not found            | Place `dnstt-client.exe` next to `findns.exe` or add its folder to PATH    |
+| PowerShell blocks execution         | Use `cmd.exe` or run `Set-ExecutionPolicy RemoteSigned -Scope CurrentUser` |
+| Long commands break                 | Use backtick `` ` `` (PowerShell) or `^` (cmd) for line continuation       |
 
 ---
 
@@ -230,8 +231,14 @@ Results are saved as JSON with an auto-generated `_ips.txt` companion file. The 
 ```json
 {
   "passed": [
-    {"ip": "1.1.1.1", "metrics": {"ping_ms": 4.2, "resolve_ms": 15.3, "edns_max": 1232}},
-    {"ip": "8.8.8.8", "metrics": {"ping_ms": 12.7, "resolve_ms": 22.1, "edns_max": 1232}}
+    {
+      "ip": "1.1.1.1",
+      "metrics": { "ping_ms": 4.2, "resolve_ms": 15.3, "edns_max": 1232 }
+    },
+    {
+      "ip": "8.8.8.8",
+      "metrics": { "ping_ms": 12.7, "resolve_ms": 22.1, "edns_max": 1232 }
+    }
   ]
 }
 ```
@@ -273,21 +280,26 @@ findns scan --domain t.example.com
 
 > When `--domain` is set, the basic `resolve` step (A record for google.com) is skipped — tunnel domains have no A record, so findns goes straight to `resolve/tunnel`.
 
-| Flag | Description | Default |
-|------|-------------|---------|
-| `--domain` | Tunnel domain (enables tunnel/e2e steps) | — |
-| `--pubkey` | DNSTT server public key (enables e2e test) | — |
-| `--cert` | Slipstream cert path (enables Slipstream e2e) | — |
-| `--test-url` | URL to fetch through tunnel for e2e test | `http://httpbin.org/ip` |
-| `--proxy-auth` | SOCKS proxy auth as `user:pass` (for e2e tests) | — |
-| `--doh` | Scan DoH resolvers instead of UDP | `false` |
-| `--edns` | Include EDNS payload size check | `false` |
-| `--edns-size` | EDNS0 UDP payload size in bytes (larger = better throughput) | `1232` |
-| `--cidr` | Scan a CIDR range directly (e.g. `--cidr 5.52.0.0/16`) | — |
-| `--skip-ping` | Skip ICMP ping step | `false` |
-| `--skip-nxdomain` | Skip NXDOMAIN hijack check | `false` |
-| `--top` | Number of top results to display | `10` |
-| `--output-ips` | Write plain IP list alongside JSON | auto |
+| Flag                                       | Description                                                            | Default                 |
+| ------------------------------------------ | ---------------------------------------------------------------------- | ----------------------- |
+| `--domain`                                 | Tunnel domain (enables tunnel/e2e steps)                               | —                       |
+| `--pubkey`                                 | DNSTT server public key (enables e2e test)                             | —                       |
+| `--cert`                                   | Slipstream cert path (enables Slipstream e2e)                          | —                       |
+| `--masterdns-domain` _(repeatable)_        | MasterDnsVPN tunnel domain (enables `e2e/masterdns`)                   | —                       |
+| `--masterdns-key` / `--masterdns-key-file` | MasterDnsVPN shared encryption key (file wins)                         | —                       |
+| `--masterdns-encryption-method`            | 0=None, 1=XOR, 2=ChaCha20, 3=AES-128-GCM, 4=AES-192-GCM, 5=AES-256-GCM | `1`                     |
+| `--masterdns-config`                       | Path to template `client_config.toml` (auto-detected next to findns)   | —                       |
+| `--masterdns-mtu-bisect`                   | Capture `mdvpn_up_mtu` / `mdvpn_down_mtu` (slower)                     | `false`                 |
+| `--test-url`                               | URL to fetch through tunnel for e2e test                               | `http://httpbin.org/ip` |
+| `--proxy-auth`                             | SOCKS proxy auth as `user:pass` (for e2e tests)                        | —                       |
+| `--doh`                                    | Scan DoH resolvers instead of UDP                                      | `false`                 |
+| `--edns`                                   | Include EDNS payload size check                                        | `false`                 |
+| `--edns-size`                              | EDNS0 UDP payload size in bytes (larger = better throughput)           | `1232`                  |
+| `--cidr`                                   | Scan a CIDR range directly (e.g. `--cidr 5.52.0.0/16`)                 | —                       |
+| `--skip-ping`                              | Skip ICMP ping step                                                    | `false`                 |
+| `--skip-nxdomain`                          | Skip NXDOMAIN hijack check                                             | `false`                 |
+| `--top`                                    | Number of top results to display                                       | `10`                    |
+| `--output-ips`                             | Write plain IP list alongside JSON                                     | auto                    |
 
 ---
 
@@ -307,6 +319,7 @@ findns fetch -o doh-resolvers.txt --doh
 ```
 
 **Built-in DoH endpoints** include:
+
 - 🔵 Google (`dns.google`)
 - 🟠 Cloudflare (`cloudflare-dns.com`)
 - 🟣 Quad9 (`dns.quad9.net`)
@@ -338,14 +351,14 @@ findns local -o batch2.txt --discover --batch 1000000 --offset 1000000
 findns local --list-ranges
 ```
 
-| Flag | Description | Default |
-|------|-------------|---------|
-| `--discover` | Switch to discovery mode (CIDR expansion) | `false` |
-| `--sample N` | [discover] Random IPs per subnet | `10` |
-| `--full` | [discover] Export all ~10.8M IPs | `false` |
-| `--batch N` | [discover] Export exactly N IPs (use with `--offset`) | `0` |
-| `--offset N` | [discover] Skip N IPs before starting batch | `0` |
-| `--list-ranges` | Print embedded CIDR ranges and exit | `false` |
+| Flag            | Description                                           | Default |
+| --------------- | ----------------------------------------------------- | ------- |
+| `--discover`    | Switch to discovery mode (CIDR expansion)             | `false` |
+| `--sample N`    | [discover] Random IPs per subnet                      | `10`    |
+| `--full`        | [discover] Export all ~10.8M IPs                      | `false` |
+| `--batch N`     | [discover] Export exactly N IPs (use with `--offset`) | `0`     |
+| `--offset N`    | [discover] Skip N IPs before starting batch           | `0`     |
+| `--list-ranges` | Print embedded CIDR ranges and exit                   | `false` |
 
 ---
 
@@ -433,6 +446,50 @@ findns e2e slipstream -i resolvers.txt -o result.json \
 
 ---
 
+### 🚇 `e2e masterdns` — End-to-End MasterDnsVPN Test
+
+Spawns [`masterdnsvpn-client`](https://github.com/masterking32/MasterDnsVPN/releases/latest)
+once per resolver against a single-resolver, single-shot `client_config.toml`
+(generated on the fly), then drives a real SOCKS5 CONNECT through the tunnel.
+Multi-domain probes are supported — pass `--masterdns-domain` repeatedly.
+
+```bash
+# Inline key
+findns e2e masterdns -i resolvers.txt -o result.json \
+  --masterdns-domain v.example.com --masterdns-key <hex>
+
+# Key from file (recommended), multiple tunnel domains, AES-128-GCM
+findns e2e masterdns -i resolvers.txt -o result.json \
+  --masterdns-domain v1.example.com --masterdns-domain v2.example.com \
+  --masterdns-key-file encrypt_key.txt \
+  --masterdns-encryption-method 3
+```
+
+If you place a `client_config.toml` next to the `findns` binary it is auto-detected
+and used as a base template — `findns` only overrides the must-be-correct keys
+(`DOMAINS`, `ENCRYPTION_KEY`, `DATA_ENCRYPTION_METHOD`, `LISTEN_*`, plus single-shot
+safety knobs like `RECHECK_INACTIVE_SERVERS_ENABLED = false`). All your tuning
+(ARQ, compression, MTU, logging) is preserved.
+
+📊 **Metrics:**
+
+- `mdvpn_e2e_ms` — time from spawn to first SOCKS5 CONNECT reply.
+- `mdvpn_up_mtu`, `mdvpn_down_mtu` — only when `--masterdns-mtu-bisect` is set.
+
+🔐 **Key handling:** `--masterdns-key-file` always wins over `--masterdns-key`.
+The key is never placed on the subprocess command line — it is written to a
+`0600` temp `client_config.toml` that is deleted when the probe ends.
+
+The same flags are also accepted by `findns scan` so the masterdns step can run
+inside the full pipeline:
+
+```bash
+findns scan -i resolvers.txt \
+  --masterdns-domain v.example.com --masterdns-key-file encrypt_key.txt
+```
+
+---
+
 ### 🔒 `doh resolve` — DoH Resolver Test
 
 Test DNS resolution through DoH endpoints (HTTPS POST with `application/dns-message`).
@@ -476,6 +533,15 @@ findns chain -i resolvers.txt -o result.json \
   --step "e2e/dnstt:domain=t.example.com,pubkey=<key>"
 ```
 
+MasterDnsVPN chain example (multi-domain, key from file, MTU bisect):
+
+```bash
+findns chain -i resolvers.txt -o result.json \
+  --step "ping" \
+  --step "nxdomain" \
+  --step "e2e/masterdns:domain=v1.example.com|v2.example.com,key-file=encrypt_key.txt,enc=3,mtu-bisect=true"
+```
+
 DoH chain example:
 
 ```bash
@@ -487,39 +553,40 @@ findns chain -i doh-resolvers.txt -o result.json \
 
 **All available steps:**
 
-| Step | Required Params | Metrics | Description |
-|------|----------------|---------|-------------|
-| `ping` | — | `ping_ms` | ICMP reachability |
-| `resolve` | `domain` | `resolve_ms` | DNS A record resolution |
-| `resolve/tunnel` | `domain` | `resolve_ms` | NS delegation + glue record |
-| `nxdomain` | — | `hijack`, `nxdomain_ok` | NXDOMAIN integrity check |
-| `edns` | `domain` | `edns_max` | EDNS payload size support |
-| `e2e/dnstt` | `domain`, `pubkey` | `e2e_ms` | Real DNSTT tunnel test |
-| `e2e/slipstream` | `domain`, `cert` | `e2e_ms` | Real Slipstream tunnel test |
-| `doh/resolve` | `domain` | `resolve_ms` | DoH DNS resolution |
-| `doh/resolve/tunnel` | `domain` | `resolve_ms` | DoH NS delegation |
-| `doh/e2e` | `domain`, `pubkey` | `e2e_ms` | Real DNSTT tunnel via DoH |
+| Step                 | Required Params                   | Metrics                                                | Description                                                                                                                                                                                   |
+| -------------------- | --------------------------------- | ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ping`               | —                                 | `ping_ms`                                              | ICMP reachability                                                                                                                                                                             |
+| `resolve`            | `domain`                          | `resolve_ms`                                           | DNS A record resolution                                                                                                                                                                       |
+| `resolve/tunnel`     | `domain`                          | `resolve_ms`                                           | NS delegation + glue record                                                                                                                                                                   |
+| `nxdomain`           | —                                 | `hijack`, `nxdomain_ok`                                | NXDOMAIN integrity check                                                                                                                                                                      |
+| `edns`               | `domain`                          | `edns_max`                                             | EDNS payload size support                                                                                                                                                                     |
+| `e2e/dnstt`          | `domain`, `pubkey`                | `e2e_ms`                                               | Real DNSTT tunnel test                                                                                                                                                                        |
+| `e2e/slipstream`     | `domain`, `cert`                  | `e2e_ms`                                               | Real Slipstream tunnel test                                                                                                                                                                   |
+| `e2e/masterdns`      | `domain`, `key` _(or `key-file`)_ | `mdvpn_e2e_ms`, _opt_ `mdvpn_up_mtu`, `mdvpn_down_mtu` | Real MasterDnsVPN tunnel test (custom ARQ + SOCKS5). Multi-domain via `domain=v1.example.com\|v2.example.com`. Optional `enc` (0..5, default 1), `config` (template path), `mtu-bisect=true`. |
+| `doh/resolve`        | `domain`                          | `resolve_ms`                                           | DoH DNS resolution                                                                                                                                                                            |
+| `doh/resolve/tunnel` | `domain`                          | `resolve_ms`                                           | DoH NS delegation                                                                                                                                                                             |
+| `doh/e2e`            | `domain`, `pubkey`                | `e2e_ms`                                               | Real DNSTT tunnel via DoH                                                                                                                                                                     |
 
 Step format: `type:key=val,key=val`. Optional params: `count`, `timeout`.
 
-| Flag | Description | Default |
-|------|-------------|---------|
+| Flag          | Description                     | Default |
+| ------------- | ------------------------------- | ------- |
 | `--port-base` | Base port for e2e SOCKS proxies | `30000` |
 
 ---
 
 ## ⚙️ Global Flags
 
-| Flag | Short | Description | Default |
-|------|-------|-------------|---------|
-| `--input` | `-i` | Input file (text or JSON). If omitted, uses 7,800+ bundled Iranian resolvers | bundled list |
-| `--output` | `-o` | Output JSON file | `results.json` |
-| `--output-ips` | | Also write a plain IP list (one per line) | auto when `-o` is set |
-| `--timeout` | `-t` | Timeout per attempt (seconds) | 3 |
-| `--count` | `-c` | Attempts per IP/URL | 3 |
-| `--workers` | | Concurrent workers | 50 |
-| `--e2e-timeout` | | Timeout for e2e tests (seconds) | 20 |
-| `--include-failed` | | Also scan failed entries from JSON input | false |
+| Flag               | Short | Description                                                                  | Default               |
+| ------------------ | ----- | ---------------------------------------------------------------------------- | --------------------- |
+| `--input`          | `-i`  | Input file (text or JSON). If omitted, uses 7,800+ bundled Iranian resolvers | bundled list          |
+| `--output`         | `-o`  | Output JSON file                                                             | `results.json`        |
+| `--output-ips`     |       | Also write a plain IP list (one per line)                                    | auto when `-o` is set |
+| `--timeout`        | `-t`  | Timeout per attempt (seconds)                                                | 3                     |
+| `--count`          | `-c`  | Attempts per IP/URL                                                          | 3                     |
+| `--workers`        |       | Concurrent workers                                                           | 50                    |
+| `--e2e-timeout`    |       | Timeout for e2e tests (seconds)                                              | 20                    |
+| `--include-failed` |       | Also scan failed entries from JSON input                                     | false                 |
 
 ---
 
@@ -575,9 +642,7 @@ JSON with structured results:
       }
     }
   ],
-  "failed": [
-    {"ip": "9.9.9.9"}
-  ]
+  "failed": [{ "ip": "9.9.9.9" }]
 }
 ```
 
@@ -591,13 +656,13 @@ This project was originally inspired by [net2share/dnst-scanner](https://github.
 
 ## 🔗 Related Projects
 
-| Project | Description |
-|---------|-------------|
-| [dnstm](https://github.com/net2share/dnstm) | DNS Tunnel Manager (server) |
-| [dnstm-setup](https://github.com/SamNet-dev/dnstm-setup) | Interactive setup wizard for dnstm |
-| [ir-resolvers](https://github.com/net2share/ir-resolvers) | Regional intranet resolver list (7,800+ IPs) |
-| [dnstt](https://www.bamsoftware.com/software/dnstt/) | DNS tunnel with DoH/DoT support |
-| [slipstream-rust](https://github.com/Mygod/slipstream-rust) | QUIC-based DNS tunnel |
+| Project                                                     | Description                                  |
+| ----------------------------------------------------------- | -------------------------------------------- |
+| [dnstm](https://github.com/net2share/dnstm)                 | DNS Tunnel Manager (server)                  |
+| [dnstm-setup](https://github.com/SamNet-dev/dnstm-setup)    | Interactive setup wizard for dnstm           |
+| [ir-resolvers](https://github.com/net2share/ir-resolvers)   | Regional intranet resolver list (7,800+ IPs) |
+| [dnstt](https://www.bamsoftware.com/software/dnstt/)        | DNS tunnel with DoH/DoT support              |
+| [slipstream-rust](https://github.com/Mygod/slipstream-rust) | QUIC-based DNS tunnel                        |
 
 ---
 
@@ -618,6 +683,7 @@ If this project helps you, consider supporting development: [samnet.dev/donate](
 MIT
 
 ---
+
 ---
 
 <div dir="rtl">
@@ -634,20 +700,20 @@ MIT
 
 ## ✨ امکانات
 
-| امکان | توضیح |
-|-------|-------|
-| 🔄 **اسکن UDP + DoH** | تست هم DNS ساده (پورت 53) و هم DNS-over-HTTPS (پورت 443) |
-| 🔗 **پایپلاین کامل** | Ping → Resolve → NXDOMAIN → EDNS → Tunnel → E2E با یک دستور |
-| 🛡️ **تشخیص هایجک** | شناسایی resolverهایی که جواب جعلی برمی‌گردانند |
-| 📏 **تست EDNS** | پیدا کردن resolverهایی که payload بزرگ پشتیبانی می‌کنند (تانل سریع‌تر) |
-| 🚇 **تست واقعی تانل** | واقعاً کلاینت DNSTT/Slipstream را اجرا می‌کند و اتصال را تأیید می‌کند |
-| 📥 **دانلود لیست resolver** | دانلود خودکار از منابع عمومی |
-| 🌍 **resolverهای محلی** | لیست داخلی 7,800+ آی‌پی resolver منطقه‌ای |
-| ⚡ **همزمانی بالا** | 50 worker موازی — هزاران resolver در چند دقیقه اسکن می‌شود |
-| 📋 **خروجی JSON** | خروجی هر اسکن ورودی اسکن بعدی می‌شود |
-| 🌐 **ورودی CIDR** | رنج آی‌پی مثل `185.51.200.0/24` را می‌خواند و به صورت خودکار باز می‌کند |
-| 🖥️ **رابط کاربری ترمینال (TUI)** | رابط تعاملی کامل — بدون نیاز به حفظ فلگ‌ها |
-| 🔌 **کاملاً آفلاین** | بدون تنظیم: resolverهای داخلی خودکار بارگذاری می‌شوند، نیازی به `-i` یا `-o` نیست |
+| امکان                            | توضیح                                                                             |
+| -------------------------------- | --------------------------------------------------------------------------------- |
+| 🔄 **اسکن UDP + DoH**            | تست هم DNS ساده (پورت 53) و هم DNS-over-HTTPS (پورت 443)                          |
+| 🔗 **پایپلاین کامل**             | Ping → Resolve → NXDOMAIN → EDNS → Tunnel → E2E با یک دستور                       |
+| 🛡️ **تشخیص هایجک**               | شناسایی resolverهایی که جواب جعلی برمی‌گردانند                                    |
+| 📏 **تست EDNS**                  | پیدا کردن resolverهایی که payload بزرگ پشتیبانی می‌کنند (تانل سریع‌تر)            |
+| 🚇 **تست واقعی تانل**            | واقعاً کلاینت DNSTT/Slipstream را اجرا می‌کند و اتصال را تأیید می‌کند             |
+| 📥 **دانلود لیست resolver**      | دانلود خودکار از منابع عمومی                                                      |
+| 🌍 **resolverهای محلی**          | لیست داخلی 7,800+ آی‌پی resolver منطقه‌ای                                         |
+| ⚡ **همزمانی بالا**              | 50 worker موازی — هزاران resolver در چند دقیقه اسکن می‌شود                        |
+| 📋 **خروجی JSON**                | خروجی هر اسکن ورودی اسکن بعدی می‌شود                                              |
+| 🌐 **ورودی CIDR**                | رنج آی‌پی مثل `185.51.200.0/24` را می‌خواند و به صورت خودکار باز می‌کند           |
+| 🖥️ **رابط کاربری ترمینال (TUI)** | رابط تعاملی کامل — بدون نیاز به حفظ فلگ‌ها                                        |
+| 🔌 **کاملاً آفلاین**             | بدون تنظیم: resolverهای داخلی خودکار بارگذاری می‌شوند، نیازی به `-i` یا `-o` نیست |
 
 ---
 
@@ -668,12 +734,12 @@ MIT
 
 ### 🤔 چرا DoH مهم است؟
 
-| پروتکل | پورت | قابل شناسایی | وضعیت در شبکه‌های محدود |
-|---------|------|-------------|----------------|
-| 🔴 UDP DNS | 53 | کاملاً قابل مشاهده | تحت نظارت، اغلب مسدود |
-| 🔴 DoT | 853 | TLS روی پورت شناخته شده | از سال ۲۰۲۰ مسدود |
-| 🟢 **DoH** | **443** | **شبیه HTTPS معمولی** | **سخت برای شناسایی** |
-| 🔴 DoQ | 443/UDP | مبتنی بر QUIC | QUIC در تمام ISPها غیرفعال |
+| پروتکل     | پورت    | قابل شناسایی            | وضعیت در شبکه‌های محدود    |
+| ---------- | ------- | ----------------------- | -------------------------- |
+| 🔴 UDP DNS | 53      | کاملاً قابل مشاهده      | تحت نظارت، اغلب مسدود      |
+| 🔴 DoT     | 853     | TLS روی پورت شناخته شده | از سال ۲۰۲۰ مسدود          |
+| 🟢 **DoH** | **443** | **شبیه HTTPS معمولی**   | **سخت برای شناسایی**       |
+| 🔴 DoQ     | 443/UDP | مبتنی بر QUIC           | QUIC در تمام ISPها غیرفعال |
 
 سرور DNSTT **همیشه** روی پورت 53 گوش می‌دهد. اما **کلاینت** می‌تواند با resolver واسط از طریق پروتکل‌های مختلف ارتباط برقرار کند. DoH کوئری‌های DNS را داخل HTTPS معمولی قرار می‌دهد و برای فایروال‌ها تقریباً نامرئی است.
 
@@ -723,6 +789,7 @@ chmod +x findns-linux-amd64
 - **Go 1.24+** برای بیلد از سورس
 - **dnstt-client** — فقط برای تست e2e تانل (`--pubkey`). نصب: `go install www.bamsoftware.com/git/dnstt.git/dnstt-client@latest`
 - **slipstream-client** — فقط برای تست e2e Slipstream (`--cert`)
+- **masterdnsvpn-client** — فقط برای تست e2e MasterDnsVPN (`--masterdns-domain`). دانلود: https://github.com/masterking32/MasterDnsVPN/releases/latest
 - **curl** — برای تأیید اتصال e2e
 
 > **پیدا کردن باینری:** findns به صورت خودکار `dnstt-client` و `slipstream-client` را در سه مسیر جستجو می‌کند: ۱) `PATH` سیستم ۲) پوشه فعلی ۳) کنار فایل findns. ساده‌ترین روش: فایل را کنار findns بگذارید.
@@ -797,12 +864,12 @@ go build -o findns.exe ./cmd
 
 ### مشکلات رایج
 
-| مشکل | راه حل |
-|------|--------|
-| `ping` نشان می‌دهد 0% loss ولی اسکن فیل می‌شود | به عنوان **Administrator** اجرا کنید — ICMP در ویندوز نیاز به دسترسی بالا دارد |
-| `dnstt-client` پیدا نمی‌شود | فایل `dnstt-client.exe` را کنار `findns.exe` قرار دهید یا پوشه‌اش را به PATH اضافه کنید |
-| PowerShell اجرا را بلاک می‌کند | از `cmd.exe` استفاده کنید یا `Set-ExecutionPolicy RemoteSigned -Scope CurrentUser` را اجرا کنید |
-| دستورات طولانی خطا می‌دهند | از بک‌تیک `` ` `` (PowerShell) یا `^` (cmd) برای ادامه خط استفاده کنید |
+| مشکل                                           | راه حل                                                                                          |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `ping` نشان می‌دهد 0% loss ولی اسکن فیل می‌شود | به عنوان **Administrator** اجرا کنید — ICMP در ویندوز نیاز به دسترسی بالا دارد                  |
+| `dnstt-client` پیدا نمی‌شود                    | فایل `dnstt-client.exe` را کنار `findns.exe` قرار دهید یا پوشه‌اش را به PATH اضافه کنید         |
+| PowerShell اجرا را بلاک می‌کند                 | از `cmd.exe` استفاده کنید یا `Set-ExecutionPolicy RemoteSigned -Scope CurrentUser` را اجرا کنید |
+| دستورات طولانی خطا می‌دهند                     | از بک‌تیک `` ` `` (PowerShell) یا `^` (cmd) برای ادامه خط استفاده کنید                          |
 
 ---
 
@@ -898,7 +965,10 @@ findns scan --domain t.example.com --edns --edns-size 900
 ```json
 {
   "passed": [
-    {"ip": "1.1.1.1", "metrics": {"ping_ms": 4.2, "resolve_ms": 15.3, "edns_max": 1232}}
+    {
+      "ip": "1.1.1.1",
+      "metrics": { "ping_ms": 4.2, "resolve_ms": 15.3, "edns_max": 1232 }
+    }
   ]
 }
 ```
@@ -940,21 +1010,26 @@ findns tui
 
 > وقتی `--domain` تنظیم شود، مرحله `resolve` ساده (رکورد A برای google.com) رد می‌شود — دامنه‌های تانل رکورد A ندارند، بنابراین findns مستقیم به `resolve/tunnel` می‌رود.
 
-| فلگ | توضیح | پیش‌فرض |
-|-----|-------|---------|
-| `--domain` | دامنه تانل (فعال‌سازی تست تانل/e2e) | — |
-| `--pubkey` | کلید عمومی سرور DNSTT (فعال‌سازی تست e2e) | — |
-| `--cert` | مسیر گواهی Slipstream (فعال‌سازی تست Slipstream) | — |
-| `--test-url` | آدرس برای تست اتصال e2e | `http://httpbin.org/ip` |
-| `--proxy-auth` | احراز هویت پروکسی SOCKS به صورت `user:pass` (برای تست e2e) | — |
-| `--doh` | اسکن DoH به جای UDP | `false` |
-| `--edns` | فعال‌سازی تست سایز EDNS payload | `false` |
-| `--edns-size` | سایز بافر EDNS0 به بایت (بزرگتر = سرعت بیشتر) | `1232` |
-| `--cidr` | اسکن مستقیم رنج CIDR (مثلاً `--cidr 5.52.0.0/16`) | — |
-| `--skip-ping` | رد کردن مرحله ping | `false` |
-| `--skip-nxdomain` | رد کردن بررسی هایجک | `false` |
-| `--top` | تعداد نتایج برتر برای نمایش | `10` |
-| `--output-ips` | خروجی لیست آی‌پی ساده کنار JSON | خودکار |
+| فلگ                                        | توضیح                                                                                | پیش‌فرض                 |
+| ------------------------------------------ | ------------------------------------------------------------------------------------ | ----------------------- |
+| `--domain`                                 | دامنه تانل (فعال‌سازی تست تانل/e2e)                                                  | —                       |
+| `--pubkey`                                 | کلید عمومی سرور DNSTT (فعال‌سازی تست e2e)                                            | —                       |
+| `--cert`                                   | مسیر گواهی Slipstream (فعال‌سازی تست Slipstream)                                     | —                       |
+| `--masterdns-domain` _(تکرارپذیر)_         | دامنه تانل MasterDnsVPN (فعال‌سازی `e2e/masterdns`)                                  | —                       |
+| `--masterdns-key` / `--masterdns-key-file` | کلید رمزنگاری مشترک MasterDnsVPN (فایل ارجحیت دارد)                                  | —                       |
+| `--masterdns-encryption-method`            | روش رمزنگاری: 0=بدون، 1=XOR، 2=ChaCha20، 3=AES-128-GCM، 4=AES-192-GCM، 5=AES-256-GCM | `1`                     |
+| `--masterdns-config`                       | مسیر قالب `client_config.toml` (در صورت وجود کنار findns خودکار استفاده می‌شود)      | —                       |
+| `--masterdns-mtu-bisect`                   | جمع‌آوری `mdvpn_up_mtu` و `mdvpn_down_mtu` (کندتر)                                   | `false`                 |
+| `--test-url`                               | آدرس برای تست اتصال e2e                                                              | `http://httpbin.org/ip` |
+| `--proxy-auth`                             | احراز هویت پروکسی SOCKS به صورت `user:pass` (برای تست e2e)                           | —                       |
+| `--doh`                                    | اسکن DoH به جای UDP                                                                  | `false`                 |
+| `--edns`                                   | فعال‌سازی تست سایز EDNS payload                                                      | `false`                 |
+| `--edns-size`                              | سایز بافر EDNS0 به بایت (بزرگتر = سرعت بیشتر)                                        | `1232`                  |
+| `--cidr`                                   | اسکن مستقیم رنج CIDR (مثلاً `--cidr 5.52.0.0/16`)                                    | —                       |
+| `--skip-ping`                              | رد کردن مرحله ping                                                                   | `false`                 |
+| `--skip-nxdomain`                          | رد کردن بررسی هایجک                                                                  | `false`                 |
+| `--top`                                    | تعداد نتایج برتر برای نمایش                                                          | `10`                    |
+| `--output-ips`                             | خروجی لیست آی‌پی ساده کنار JSON                                                      | خودکار                  |
 
 ---
 
@@ -971,6 +1046,7 @@ findns fetch -o doh-resolvers.txt --doh # آدرس‌های DoH
 <div dir="rtl">
 
 **سرویس‌های DoH داخلی** شامل:
+
 - 🔵 Google (`dns.google`)
 - 🟠 Cloudflare (`cloudflare-dns.com`)
 - 🟣 Quad9 (`dns.quad9.net`)
@@ -1012,14 +1088,14 @@ findns local --list-ranges
 
 <div dir="rtl">
 
-| فلگ | توضیح | پیش‌فرض |
-|-----|-------|---------|
-| `--discover` | حالت کشف resolver جدید (از CIDR) | `false` |
-| `--sample N` | [discover] آی‌پی تصادفی از هر subnet | `10` |
-| `--full` | [discover] تمام ~10.8M آی‌پی | `false` |
-| `--batch N` | [discover] دقیقاً N آی‌پی (با `--offset`) | `0` |
-| `--offset N` | [discover] رد کردن N آی‌پی اول | `0` |
-| `--list-ranges` | چاپ رنج‌های CIDR و خروج | `false` |
+| فلگ             | توضیح                                     | پیش‌فرض |
+| --------------- | ----------------------------------------- | ------- |
+| `--discover`    | حالت کشف resolver جدید (از CIDR)          | `false` |
+| `--sample N`    | [discover] آی‌پی تصادفی از هر subnet      | `10`    |
+| `--full`        | [discover] تمام ~10.8M آی‌پی              | `false` |
+| `--batch N`     | [discover] دقیقاً N آی‌پی (با `--offset`) | `0`     |
+| `--offset N`    | [discover] رد کردن N آی‌پی اول            | `0`     |
+| `--list-ranges` | چاپ رنج‌های CIDR و خروج                   | `false` |
 
 ---
 
@@ -1135,6 +1211,56 @@ findns e2e slipstream -i resolvers.txt -o result.json \
 
 ---
 
+### 🚇 `e2e masterdns` — تست واقعی تانل MasterDnsVPN
+
+برای هر resolver یک‌بار `masterdnsvpn-client` را با یک
+`client_config.toml` اختصاصی (که خود findns تولید می‌کند) اجرا می‌کند و سپس
+از طریق پروکسی محلی SOCKS5 یک CONNECT واقعی به `example.com:80` می‌فرستد.
+تأیید این CONNECT یعنی داده‌ها در دو جهت از تانل DNS عبور کرده‌اند.
+
+پشتیبانی از چند دامنه با تکرار فلگ `--masterdns-domain`. کلید را با فایل
+بدهید (امن‌تر است؛ هرگز روی command line قرار نمی‌گیرد):
+
+</div>
+
+```bash
+findns e2e masterdns -i resolvers.txt -o result.json \
+  --masterdns-domain v1.example.com --masterdns-domain v2.example.com \
+  --masterdns-key-file encrypt_key.txt \
+  --masterdns-encryption-method 3
+```
+
+<div dir="rtl">
+
+اگر فایل `client_config.toml` کنار باینری findns قرار داشته باشد، به طور
+خودکار به عنوان قالب پایه استفاده می‌شود و فقط کلیدهایی که باید درست باشند
+(`DOMAINS`, `ENCRYPTION_KEY`, `DATA_ENCRYPTION_METHOD`, `LISTEN_*` و چند
+کلید ایمنی single-shot) بازنویسی می‌شوند. تنظیمات پیشرفته شما (ARQ، فشرده‌سازی،
+MTU، لاگ) دست‌نخورده باقی می‌ماند.
+
+📊 **متریک‌ها:**
+
+- `mdvpn_e2e_ms` — زمان از اجرای کلاینت تا اولین پاسخ SOCKS5 CONNECT.
+- `mdvpn_up_mtu` و `mdvpn_down_mtu` — فقط در صورت استفاده از `--masterdns-mtu-bisect`.
+
+🔐 **مدیریت کلید:** فایل (`--masterdns-key-file`) همیشه بر روی فلگ مستقیم
+(`--masterdns-key`) ارجحیت دارد. کلید هرگز در `ps`/`top` دیده نمی‌شود — فقط در
+یک فایل TOML موقت با مجوز `0600` نوشته می‌شود که در پایان حذف می‌گردد.
+
+همین فلگ‌ها در `findns scan` هم پشتیبانی می‌شوند تا مرحله masterdns داخل
+زنجیره کامل اسکن قرار گیرد:
+
+</div>
+
+```bash
+findns scan -i resolvers.txt \
+  --masterdns-domain v.example.com --masterdns-key-file encrypt_key.txt
+```
+
+<div dir="rtl">
+
+---
+
 ### 🔒 `doh resolve` — تست Resolve از طریق DoH
 
 تست resolve رکورد DNS از طریق DoH (HTTPS POST با `application/dns-message`).
@@ -1194,6 +1320,19 @@ findns chain -i resolvers.txt -o result.json \
 
 <div dir="rtl">
 
+مثال chain با MasterDnsVPN (چند دامنه، کلید از فایل، MTU bisect):
+
+</div>
+
+```bash
+findns chain -i resolvers.txt -o result.json \
+  --step "ping" \
+  --step "nxdomain" \
+  --step "e2e/masterdns:domain=v1.example.com|v2.example.com,key-file=encrypt_key.txt,enc=3,mtu-bisect=true"
+```
+
+<div dir="rtl">
+
 مثال chain با DoH:
 
 </div>
@@ -1209,39 +1348,40 @@ findns chain -i doh-resolvers.txt -o result.json \
 
 **تمام مراحل موجود:**
 
-| مرحله | پارامترهای الزامی | متریک‌ها | توضیح |
-|-------|-------------------|----------|-------|
-| `ping` | — | `ping_ms` | بررسی دسترسی‌پذیری ICMP |
-| `resolve` | `domain` | `resolve_ms` | resolve رکورد A |
-| `resolve/tunnel` | `domain` | `resolve_ms` | NS delegation + رکورد glue |
-| `nxdomain` | — | `hijack`, `nxdomain_ok` | بررسی صحت NXDOMAIN |
-| `edns` | `domain` | `edns_max` | تست سایز payload EDNS |
-| `e2e/dnstt` | `domain`, `pubkey` | `e2e_ms` | تست واقعی تانل DNSTT |
-| `e2e/slipstream` | `domain`, `cert` | `e2e_ms` | تست واقعی تانل Slipstream |
-| `doh/resolve` | `domain` | `resolve_ms` | resolve از طریق DoH |
-| `doh/resolve/tunnel` | `domain` | `resolve_ms` | NS delegation از طریق DoH |
-| `doh/e2e` | `domain`, `pubkey` | `e2e_ms` | تست واقعی تانل از طریق DoH |
+| مرحله                | پارامترهای الزامی             | متریک‌ها                                                                               | توضیح                                                                                                                                                                                               |
+| -------------------- | ----------------------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ping`               | —                             | `ping_ms`                                                                              | بررسی دسترسی‌پذیری ICMP                                                                                                                                                                             |
+| `resolve`            | `domain`                      | `resolve_ms`                                                                           | resolve رکورد A                                                                                                                                                                                     |
+| `resolve/tunnel`     | `domain`                      | `resolve_ms`                                                                           | NS delegation + رکورد glue                                                                                                                                                                          |
+| `nxdomain`           | —                             | `hijack`, `nxdomain_ok`                                                                | بررسی صحت NXDOMAIN                                                                                                                                                                                  |
+| `edns`               | `domain`                      | `edns_max`                                                                             | تست سایز payload EDNS                                                                                                                                                                               |
+| `e2e/dnstt`          | `domain`, `pubkey`            | `e2e_ms`                                                                               | تست واقعی تانل DNSTT                                                                                                                                                                                |
+| `e2e/slipstream`     | `domain`, `cert`              | `e2e_ms`                                                                               | تست واقعی تانل Slipstream                                                                                                                                                                           |
+| `e2e/masterdns`      | `domain`, `key` یا `key-file` | `mdvpn_e2e_ms` و در صورت `mtu-bisect=true` متریک‌های `mdvpn_up_mtu` و `mdvpn_down_mtu` | تست واقعی تانل MasterDnsVPN (ARQ سفارشی + SOCKS5). چند دامنه با `domain=v1.example.com\|v2.example.com`. پارامترهای اختیاری: `enc` (۰..۵، پیش‌فرض ۱)، `config` (مسیر قالب TOML)، `mtu-bisect=true`. |
+| `doh/resolve`        | `domain`                      | `resolve_ms`                                                                           | resolve از طریق DoH                                                                                                                                                                                 |
+| `doh/resolve/tunnel` | `domain`                      | `resolve_ms`                                                                           | NS delegation از طریق DoH                                                                                                                                                                           |
+| `doh/e2e`            | `domain`, `pubkey`            | `e2e_ms`                                                                               | تست واقعی تانل از طریق DoH                                                                                                                                                                          |
 
 فرمت مراحل: `type:key=val,key=val`. پارامترهای اختیاری: `count`, `timeout`.
 
-| فلگ | توضیح | پیش‌فرض |
-|-----|-------|---------|
+| فلگ           | توضیح                               | پیش‌فرض |
+| ------------- | ----------------------------------- | ------- |
 | `--port-base` | پورت شروع برای پروکسی SOCKS تست e2e | `30000` |
 
 ---
 
 ## ⚙️ فلگ‌های عمومی
 
-| فلگ | مخفف | توضیح | پیش‌فرض |
-|-----|------|-------|---------|
-| `--input` | `-i` | فایل ورودی (متن یا JSON). اگر داده نشود، از 7,800+ resolver ایرانی داخلی استفاده می‌شود | لیست داخلی |
-| `--output` | `-o` | فایل خروجی JSON | `results.json` |
-| `--output-ips` | | خروجی لیست آی‌پی ساده (هر خط یک آی‌پی) | خودکار وقتی `-o` تنظیم شود |
-| `--timeout` | `-t` | تایم‌اوت هر تلاش (ثانیه) | 3 |
-| `--count` | `-c` | تعداد تلاش برای هر IP/URL | 3 |
-| `--workers` | | تعداد workerهای موازی | 50 |
-| `--e2e-timeout` | | تایم‌اوت تست‌های e2e (ثانیه) | 20 |
-| `--include-failed` | | اسکن IPهای فیل‌شده از ورودی JSON | false |
+| فلگ                | مخفف | توضیح                                                                                   | پیش‌فرض                    |
+| ------------------ | ---- | --------------------------------------------------------------------------------------- | -------------------------- |
+| `--input`          | `-i` | فایل ورودی (متن یا JSON). اگر داده نشود، از 7,800+ resolver ایرانی داخلی استفاده می‌شود | لیست داخلی                 |
+| `--output`         | `-o` | فایل خروجی JSON                                                                         | `results.json`             |
+| `--output-ips`     |      | خروجی لیست آی‌پی ساده (هر خط یک آی‌پی)                                                  | خودکار وقتی `-o` تنظیم شود |
+| `--timeout`        | `-t` | تایم‌اوت هر تلاش (ثانیه)                                                                | 3                          |
+| `--count`          | `-c` | تعداد تلاش برای هر IP/URL                                                               | 3                          |
+| `--workers`        |      | تعداد workerهای موازی                                                                   | 50                         |
+| `--e2e-timeout`    |      | تایم‌اوت تست‌های e2e (ثانیه)                                                            | 20                         |
+| `--include-failed` |      | اسکن IPهای فیل‌شده از ورودی JSON                                                        | false                      |
 
 ---
 
@@ -1303,9 +1443,7 @@ JSON با نتایج ساختاریافته:
       }
     }
   ],
-  "failed": [
-    {"ip": "9.9.9.9"}
-  ]
+  "failed": [{ "ip": "9.9.9.9" }]
 }
 ```
 
@@ -1323,13 +1461,13 @@ JSON با نتایج ساختاریافته:
 
 ## 🔗 پروژه‌های مرتبط
 
-| پروژه | توضیح |
-|-------|-------|
-| [dnstm](https://github.com/net2share/dnstm) | مدیریت تانل DNS (سرور) |
-| [dnstm-setup](https://github.com/SamNet-dev/dnstm-setup) | ویزارد نصب تعاملی dnstm |
-| [ir-resolvers](https://github.com/net2share/ir-resolvers) | لیست resolverهای محلی (7,800+ IP) |
-| [dnstt](https://www.bamsoftware.com/software/dnstt/) | تانل DNS با پشتیبانی DoH/DoT |
-| [slipstream-rust](https://github.com/Mygod/slipstream-rust) | تانل DNS مبتنی بر QUIC |
+| پروژه                                                       | توضیح                             |
+| ----------------------------------------------------------- | --------------------------------- |
+| [dnstm](https://github.com/net2share/dnstm)                 | مدیریت تانل DNS (سرور)            |
+| [dnstm-setup](https://github.com/SamNet-dev/dnstm-setup)    | ویزارد نصب تعاملی dnstm           |
+| [ir-resolvers](https://github.com/net2share/ir-resolvers)   | لیست resolverهای محلی (7,800+ IP) |
+| [dnstt](https://www.bamsoftware.com/software/dnstt/)        | تانل DNS با پشتیبانی DoH/DoT      |
+| [slipstream-rust](https://github.com/Mygod/slipstream-rust) | تانل DNS مبتنی بر QUIC            |
 
 ---
 

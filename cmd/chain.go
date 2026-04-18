@@ -145,6 +145,41 @@ func buildStep(cfg stepConfig, defaultTimeout, defaultCount int, ports chan int,
 		}
 		return scanner.Step{Name: "doh/e2e", Timeout: dur, Check: scanner.DoHDnsttCheckBin(binPaths["dnstt-client"], domain, pubkey, ports), SortBy: "e2e_ms"}, nil
 
+	case "e2e/masterdns":
+		// Multi-domain support uses pipe-separated values inside a single
+		// 'domain' param because chain's outer separator is comma.
+		// e.g. domain=v1.example.com|v2.example.com
+		domain := cfg.params["domain"]
+		if domain == "" {
+			return scanner.Step{}, fmt.Errorf("step %q: missing required param 'domain' (pipe-separated for multi: domain=a|b)", cfg.name)
+		}
+		domains := strings.Split(domain, "|")
+		key := cfg.params["key"]
+		keyFile := cfg.params["key-file"]
+		if key == "" && keyFile == "" {
+			return scanner.Step{}, fmt.Errorf("step %q: provide 'key' or 'key-file'", cfg.name)
+		}
+		resolvedKey, err := scanner.LoadMasterDnsKey(key, keyFile)
+		if err != nil {
+			return scanner.Step{}, fmt.Errorf("step %q: %w", cfg.name, err)
+		}
+		encMethod := 1
+		if v, ok := cfg.params["enc"]; ok {
+			n, err := strconv.Atoi(v)
+			if err != nil || n < 0 || n > 5 {
+				return scanner.Step{}, fmt.Errorf("step %q: invalid enc=%q (need 0..5)", cfg.name, v)
+			}
+			encMethod = n
+		}
+		opts := scanner.MasterDnsOpts{
+			Domains:          domains,
+			Key:              resolvedKey,
+			EncryptionMethod: encMethod,
+			ConfigTemplate:   cfg.params["config"],
+			MTUBisect:        cfg.params["mtu-bisect"] == "true",
+		}
+		return scanner.Step{Name: "e2e/masterdns", Timeout: dur, Check: scanner.MasterDnsCheckBin(binPaths["masterdnsvpn-client"], opts, ports), SortBy: "mdvpn_e2e_ms"}, nil
+
 	default:
 		return scanner.Step{}, fmt.Errorf("unknown step type %q", cfg.name)
 	}
@@ -183,6 +218,14 @@ func runChain(cmd *cobra.Command, args []string) error {
 					return fmt.Errorf("step %q requires slipstream-client: %w", cfg.name, err)
 				}
 				binPaths["slipstream-client"] = bin
+			}
+		case "e2e/masterdns":
+			if _, ok := binPaths["masterdnsvpn-client"]; !ok {
+				bin, err := findBinary("masterdnsvpn-client")
+				if err != nil {
+					return fmt.Errorf("step %q requires masterdnsvpn-client: %w", cfg.name, err)
+				}
+				binPaths["masterdnsvpn-client"] = bin
 			}
 		}
 	}

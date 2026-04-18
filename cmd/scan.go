@@ -33,6 +33,7 @@ var stepDescriptions = map[string]string{
 	"resolve/tunnel":     "Verifying resolvers forward queries to your tunnel domain",
 	"e2e/dnstt":          "End-to-end DNSTT tunnel test (Noise handshake through resolver)",
 	"e2e/slipstream":     "Full tunnel connectivity test via Slipstream",
+	"e2e/masterdns":      "End-to-end MasterDnsVPN tunnel test (custom ARQ + SOCKS5 through resolver)",
 	"doh/resolve":        "Checking DoH resolver connectivity",
 	"doh/resolve/tunnel": "Verifying DoH resolvers forward to your tunnel domain",
 	"doh/e2e":            "Full DoH tunnel connectivity test via DNSTT",
@@ -59,6 +60,12 @@ func init() {
 	scanCmd.Flags().String("domain", "", "tunnel domain (required for tunnel/edns/e2e steps)")
 	scanCmd.Flags().String("pubkey", "", "DNSTT public key (enables e2e test)")
 	scanCmd.Flags().String("cert", "", "Slipstream cert path (enables slipstream e2e test)")
+	scanCmd.Flags().StringSlice("masterdns-domain", nil, "MasterDnsVPN tunnel domain (repeatable; enables e2e/masterdns step)")
+	scanCmd.Flags().String("masterdns-key", "", "MasterDnsVPN shared encryption key (matches server's encrypt_key.txt)")
+	scanCmd.Flags().String("masterdns-key-file", "", "path to MasterDnsVPN encryption key file (takes precedence over --masterdns-key)")
+	scanCmd.Flags().Int("masterdns-encryption-method", 1, "MasterDnsVPN encryption method 0..5 (0=None,1=XOR,2=ChaCha20,3=AES-128-GCM,4=AES-192-GCM,5=AES-256-GCM)")
+	scanCmd.Flags().String("masterdns-config", "", "path to template client_config.toml for MasterDnsVPN (auto-detected next to findns)")
+	scanCmd.Flags().Bool("masterdns-mtu-bisect", false, "additionally collect mdvpn_up_mtu / mdvpn_down_mtu (slower)")
 	scanCmd.Flags().Bool("doh", false, "scan DoH resolvers instead of UDP")
 	scanCmd.Flags().Bool("skip-ping", false, "skip ICMP ping step")
 	scanCmd.Flags().Bool("skip-nxdomain", false, "skip NXDOMAIN hijack check")
@@ -91,6 +98,13 @@ func runScan(cmd *cobra.Command, args []string) error {
 	querySize, _ := cmd.Flags().GetInt("query-size")
 	cidrRanges, _ := cmd.Flags().GetStringSlice("cidr")
 	cidrFile, _ := cmd.Flags().GetString("cidr-file")
+
+	mdvpnDomains, _ := cmd.Flags().GetStringSlice("masterdns-domain")
+	mdvpnKey, _ := cmd.Flags().GetString("masterdns-key")
+	mdvpnKeyFile, _ := cmd.Flags().GetString("masterdns-key-file")
+	mdvpnEnc, _ := cmd.Flags().GetInt("masterdns-encryption-method")
+	mdvpnCfg, _ := cmd.Flags().GetString("masterdns-config")
+	mdvpnMTUBisect, _ := cmd.Flags().GetBool("masterdns-mtu-bisect")
 
 	// Load additional CIDRs from file if provided
 	if cidrFile != "" {
@@ -161,7 +175,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 	}
 
 	// Pre-flight: verify required binaries before wasting time scanning
-	var dnsttBin, slipstreamBin string
+	var dnsttBin, slipstreamBin, mdvpnBin string
 	if pubkey != "" {
 		bin, err := findBinary("dnstt-client")
 		if err != nil {
@@ -176,8 +190,30 @@ func runScan(cmd *cobra.Command, args []string) error {
 		}
 		slipstreamBin = bin
 	}
+	// MasterDnsVPN scan step is gated by --masterdns-domain. The key may be
+	// supplied via either flag; either presence trips binary lookup.
+	// MasterDnsVPN's transport is UDP/53 only, so the DoH pipeline branch
+	// has no place to plug it in — reject the combo early instead of
+	// silently dropping the step.
+	mdvpnRequested := len(mdvpnDomains) > 0 || mdvpnKey != "" || mdvpnKeyFile != ""
+	if mdvpnRequested && dohMode {
+		return fmt.Errorf("--masterdns-* flags are incompatible with --doh (MasterDnsVPN transport is UDP/53)")
+	}
+	var mdvpnOpts scanner.MasterDnsOpts
+	if mdvpnRequested {
+		opts, err := buildMasterDnsOpts(mdvpnDomains, mdvpnKey, mdvpnKeyFile, mdvpnEnc, mdvpnCfg, mdvpnMTUBisect)
+		if err != nil {
+			return err
+		}
+		mdvpnOpts = opts
+		bin, err := findBinary("masterdnsvpn-client")
+		if err != nil {
+			return fmt.Errorf("--masterdns-domain requires masterdnsvpn-client: %w", err)
+		}
+		mdvpnBin = bin
+	}
 	dur := time.Duration(timeout) * time.Second
-	needE2E := pubkey != "" || certPath != ""
+	needE2E := pubkey != "" || certPath != "" || mdvpnRequested
 	var ports chan int
 	if needE2E {
 		ports = scanner.PortPool(30000, workers)
@@ -256,6 +292,12 @@ func runScan(cmd *cobra.Command, args []string) error {
 				Check: scanner.SlipstreamCheckBin(slipstreamBin, domain, certPath, ports), SortBy: "e2e_ms",
 			})
 		}
+		if mdvpnRequested {
+			steps = append(steps, scanner.Step{
+				Name: "e2e/masterdns", Timeout: time.Duration(e2eTimeout) * time.Second,
+				Check: scanner.MasterDnsCheckBin(mdvpnBin, mdvpnOpts, ports), SortBy: "mdvpn_e2e_ms",
+			})
+		}
 	}
 
 	if len(steps) == 0 {
@@ -309,7 +351,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 	}
 
 	printBanner(len(ips), dohMode, domain, steps)
-	printPreFlight(len(ips), domain, dnsttBin, slipstreamBin, steps)
+	printPreFlight(len(ips), domain, dnsttBin, slipstreamBin, mdvpnBin, steps)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
@@ -399,7 +441,7 @@ func hline(left, fill, right string, width int) string {
 	return left + strings.Repeat(fill, width) + right
 }
 
-func printPreFlight(ipCount int, domain, dnsttBin, slipstreamBin string, steps []scanner.Step) {
+func printPreFlight(ipCount int, domain, dnsttBin, slipstreamBin, mdvpnBin string, steps []scanner.Step) {
 	if !isTTY() {
 		return
 	}
@@ -413,6 +455,9 @@ func printPreFlight(ipCount int, domain, dnsttBin, slipstreamBin string, steps [
 	}
 	if slipstreamBin != "" {
 		fmt.Fprintf(w, "    %s✔%s slipstream-client: %s%s%s\n", colorGreen, colorReset, colorDim, slipstreamBin, colorReset)
+	}
+	if mdvpnBin != "" {
+		fmt.Fprintf(w, "    %s✔%s masterdnsvpn-client: %s%s%s\n", colorGreen, colorReset, colorDim, mdvpnBin, colorReset)
 	}
 	if domain != "" {
 		fmt.Fprintf(w, "    %s✔%s Domain: %s%s%s\n", colorGreen, colorReset, colorCyan, domain, colorReset)
@@ -515,7 +560,7 @@ func printSummary(report scanner.ChainReport, topN int, totalTime time.Duration,
 					fmt.Fprintf(w, "  %sSee: https://github.com/SamNet-dev/findns/blob/main/GUIDE.md#-تنظیم-دامنه-تانل-مهم--قبل-از-اسکن-بخوانید%s\n", colorDim, colorReset)
 				case "ping":
 					fmt.Fprintf(w, "\n  %s\u26a0 Hint: ping had 0%% pass rate. Try --skip-ping (ICMP may be blocked).%s\n", colorYellow, colorReset)
-				case "e2e/dnstt", "e2e/slipstream", "doh/e2e":
+				case "e2e/dnstt", "e2e/slipstream", "doh/e2e", "e2e/masterdns":
 					fmt.Fprintf(w, "\n  %s\u26a0 Hint: e2e had 0%% pass rate. Make sure your tunnel server is running.%s\n", colorYellow, colorReset)
 					if diag := scanner.E2EDiagnostic(); diag != "" {
 						fmt.Fprintf(w, "  %s  Diagnostic: %s%s\n", colorDim, diag, colorReset)
