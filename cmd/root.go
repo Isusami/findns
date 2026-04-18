@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"runtime"
 	"time"
 
 	"github.com/SamNet-dev/findns/internal/binutil"
@@ -26,7 +27,9 @@ var rootCmd = &cobra.Command{
 	Use:               "findns",
 	Short:             "DNS tunnel scanner - test resolvers for tunneling viability",
 	CompletionOptions: cobra.CompletionOptions{DisableDefaultCmd: true},
-	// Launch TUI when no subcommand is given
+	// Launch TUI when no subcommand is given. Falls back to printing
+	// help on terminals that can't host the TUI (notably legacy Windows
+	// cmd.exe consoles where MakeRaw fails with "parameter is incorrect").
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg := tui.ScanConfig{
 			OutputFile: outputFile,
@@ -35,7 +38,20 @@ var rootCmd = &cobra.Command{
 			Count:      count,
 			E2ETimeout: e2eTimeout,
 		}
-		return tui.RunWithConfig(cfg)
+		err := tui.RunWithConfig(cfg)
+		if err == nil {
+			return nil
+		}
+		fmt.Fprintf(os.Stderr, "Could not start interactive TUI: %v\n\n", err)
+		if runtime.GOOS == "windows" {
+			fmt.Fprintln(os.Stderr, "On Windows, the TUI requires Windows Terminal or PowerShell with VT support.")
+			fmt.Fprintln(os.Stderr, "  - Recommended: install Windows Terminal from https://aka.ms/terminal")
+			fmt.Fprintln(os.Stderr, "  - Or run a CLI subcommand directly (no TUI needed); see commands below.")
+		} else {
+			fmt.Fprintln(os.Stderr, "Run a CLI subcommand directly instead; see commands below.")
+		}
+		fmt.Fprintln(os.Stderr)
+		return cmd.Help()
 	},
 }
 

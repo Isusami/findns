@@ -203,8 +203,18 @@ func Run() error {
 }
 
 // RunWithConfig launches the TUI with pre-populated configuration from CLI flags.
+//
+// On Windows, BubbleTea's default stdin handling can fail in legacy
+// console hosts (cmd.exe before Windows 10 1809, ConEmu, some RDP
+// sessions) with "error making raw: The parameter is incorrect".
+// Using WithInputTTY() forces BubbleTea to open CONIN$ directly,
+// which sidesteps that whole class of issue.
 func RunWithConfig(cfg ScanConfig) error {
-	p := tea.NewProgram(NewModelWithConfig(cfg), tea.WithAltScreen())
+	p := tea.NewProgram(
+		NewModelWithConfig(cfg),
+		tea.WithAltScreen(),
+		tea.WithInputTTY(),
+	)
 	_, err := p.Run()
 	if err != nil {
 		return fmt.Errorf("TUI error: %w", err)
