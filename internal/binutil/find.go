@@ -11,20 +11,31 @@ import (
 
 // platformVariants returns the names to search for a given binary.
 // It includes the exact name plus platform-specific variants so users
-// can use the release filename (e.g. dnstt-client-linux) without renaming.
+// can use the release filename (e.g. dnstt-client-linux,
+// masterdnsvpn-client-darwin-arm64) without renaming.
+//
+// Order matters: more specific variants are tried first so that when
+// multiple companion binaries are present the right architecture wins.
 func platformVariants(name string) []string {
-	variants := []string{name}
-	switch runtime.GOOS {
-	case "windows":
-		if filepath.Ext(name) == "" {
-			variants = []string{name + ".exe", name}
+	goos, goarch := runtime.GOOS, runtime.GOARCH
+	if goos == "windows" {
+		// On Windows, prefer the .exe-suffixed forms.
+		base := name
+		if filepath.Ext(name) == ".exe" {
+			base = name[:len(name)-4]
 		}
-	case "linux":
-		variants = append(variants, name+"-linux")
-	case "darwin":
-		variants = append(variants, name+"-darwin")
+		return []string{
+			base + "-" + goos + "-" + goarch + ".exe",
+			base + "-" + goos + ".exe",
+			base + ".exe",
+			base,
+		}
 	}
-	return variants
+	return []string{
+		name + "-" + goos + "-" + goarch,
+		name + "-" + goos,
+		name,
+	}
 }
 
 // Find looks for a binary in PATH, then in the current directory,
@@ -73,7 +84,7 @@ func Find(name string) (string, error) {
 	case "slipstream-client":
 		hint = "\n\nDownload from: https://github.com/Mygod/slipstream-rust/releases"
 	case "masterdnsvpn-client":
-		hint = "\n\nDownload pre-built MasterDnsVPN client for your platform from:\n  https://github.com/masterking32/MasterDnsVPN/releases/latest\n\nUnzip the archive and place the binary (e.g. MasterDnsVPN_Client_Linux_AMD64)\nnext to findns, or rename it to 'masterdnsvpn-client' for auto-discovery."
+		hint = "\n\nDownload pre-bundled MasterDnsVPN client from findns releases:\n  https://github.com/SamNet-dev/findns/releases/latest\n\nFiles are named masterdnsvpn-client-<os>-<arch> and are auto-discovered\nwhen placed next to the findns binary. Upstream source:\n  https://github.com/masterking32/MasterDnsVPN/releases/latest"
 	}
 
 	pathHelp := fmt.Sprintf("  2. Move it to a folder in PATH:  sudo mv %s /usr/local/bin/\n  3. Or add current directory to PATH:  export PATH=$PATH:$(pwd)", name)

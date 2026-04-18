@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
 
 permissions:
   contents: write
@@ -41,7 +41,7 @@ jobs:
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: '0'
+          CGO_ENABLED: "0"
         run: go build -ldflags="-s -w" -o findns-${{ matrix.suffix }} ./cmd
 
       - name: Upload artifact
@@ -66,7 +66,7 @@ jobs:
       - name: Build slipstream-client
         working-directory: /tmp/slipstream-rust
         env:
-          PICOQUIC_AUTO_BUILD: '1'
+          PICOQUIC_AUTO_BUILD: "1"
         run: cargo build -p slipstream-client --release
 
       - name: Upload artifact
@@ -75,8 +75,67 @@ jobs:
           name: slipstream-client-linux-amd64
           path: /tmp/slipstream-rust/target/release/slipstream-client
 
+  bundle-masterdnsvpn-client:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - upstream: MasterDnsVPN_Client_Linux_AMD64.tar.gz
+            archive: tar
+            out: masterdnsvpn-client-linux-amd64
+          - upstream: MasterDnsVPN_Client_Linux_ARM64.tar.gz
+            archive: tar
+            out: masterdnsvpn-client-linux-arm64
+          - upstream: MasterDnsVPN_Client_MacOS_AMD64.tar.gz
+            archive: tar
+            out: masterdnsvpn-client-darwin-amd64
+          - upstream: MasterDnsVPN_Client_MacOS_ARM64.tar.gz
+            archive: tar
+            out: masterdnsvpn-client-darwin-arm64
+          - upstream: MasterDnsVPN_Client_Windows_AMD64.zip
+            archive: zip
+            out: masterdnsvpn-client-windows-amd64.exe
+    steps:
+      - name: Download upstream MasterDnsVPN client
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p /tmp/mdvpn
+          gh release download --repo masterking32/MasterDnsVPN \
+            --pattern '${{ matrix.upstream }}' \
+            --dir /tmp/mdvpn
+
+      - name: Extract single client binary
+        run: |
+          set -eu
+          cd /tmp/mdvpn
+          if [ "${{ matrix.archive }}" = "tar" ]; then
+            tar -xzf '${{ matrix.upstream }}'
+          else
+            unzip -o '${{ matrix.upstream }}'
+          fi
+          # Upstream tarballs contain exactly one executable named like
+          # MasterDnsVPN_Client_<Platform>_<arch>_<version>[.exe]. Find it
+          # by matching the prefix and excluding archive/readme files.
+          src=$(find . -maxdepth 1 -type f \
+            \( -name 'MasterDnsVPN_Client_*' -a ! -name '*.tar.gz' -a ! -name '*.zip' -a ! -name '*.html' \) \
+            | head -n1)
+          if [ -z "$src" ]; then
+            echo "could not locate extracted MasterDnsVPN client binary" >&2
+            ls -la
+            exit 1
+          fi
+          cp "$src" '${{ matrix.out }}'
+          chmod +x '${{ matrix.out }}'
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.out }}
+          path: /tmp/mdvpn/${{ matrix.out }}
+
   release:
-    needs: [build, build-slipstream]
+    needs: [build, build-slipstream, bundle-masterdnsvpn-client]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
