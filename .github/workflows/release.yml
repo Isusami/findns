@@ -17,18 +17,23 @@ jobs:
           - goos: linux
             goarch: amd64
             suffix: linux-amd64
+            ext: ""
           - goos: linux
             goarch: arm64
             suffix: linux-arm64
+            ext: ""
           - goos: darwin
             goarch: amd64
             suffix: darwin-amd64
+            ext: ""
           - goos: darwin
             goarch: arm64
             suffix: darwin-arm64
+            ext: ""
           - goos: windows
             goarch: amd64
-            suffix: windows-amd64.exe
+            suffix: windows-amd64
+            ext: ".exe"
 
     steps:
       - uses: actions/checkout@v4
@@ -42,13 +47,13 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: "0"
-        run: go build -ldflags="-s -w" -o findns-${{ matrix.suffix }} ./cmd
+        run: go build -ldflags="-s -w" -o findns-${{ matrix.suffix }}${{ matrix.ext }} ./cmd
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: findns-${{ matrix.suffix }}
-          path: findns-${{ matrix.suffix }}
+          path: findns-${{ matrix.suffix }}${{ matrix.ext }}
 
   build-slipstream:
     runs-on: ubuntu-latest
@@ -145,18 +150,55 @@ jobs:
           path: artifacts
           merge-multiple: true
 
-      - name: Rename slipstream binary
+      - name: Stage per-platform release zips
+        # Each release zip ships everything a user needs to run findns on
+        # that platform: the findns binary (renamed to the canonical
+        # findns / findns.exe), the matching masterdnsvpn-client binary,
+        # the bundled CIDR list, and a short README. linux-amd64 also
+        # includes slipstream-client when the rust build produced one.
         run: |
-          mv artifacts/slipstream-client artifacts/slipstream-client-linux-amd64 2>/dev/null || true
+          set -eu
+          mkdir -p out stage
+          # Normalise the slipstream artifact name (download-artifact
+          # collapses the directory; the file may end up as either
+          # slipstream-client or slipstream-client-linux-amd64).
+          if [ -f artifacts/slipstream-client ] && [ ! -f artifacts/slipstream-client-linux-amd64 ]; then
+            mv artifacts/slipstream-client artifacts/slipstream-client-linux-amd64
+          fi
 
-      - name: Stage bundled CIDR list
-        # Ship the curated /24 CIDR list as a standalone asset so users
-        # can drop it next to the findns binary; `findns scan` auto-detects
-        # it as a default --cidr-file when no other input source is set.
-        run: cp ipv4.txt artifacts/ipv4.txt
+          version="${GITHUB_REF_NAME:-dev}"
+
+          package() {
+            os=$1; arch=$2; ext=$3
+            name="findns-${os}-${arch}"
+            dir="stage/${name}"
+            mkdir -p "${dir}"
+
+            cp "artifacts/findns-${os}-${arch}${ext}" "${dir}/findns${ext}"
+            cp "artifacts/masterdnsvpn-client-${os}-${arch}${ext}" "${dir}/masterdnsvpn-client${ext}"
+            cp scan_ips_public.txt "${dir}/scan_ips_public.txt"
+
+            if [ "${os}-${arch}" = "linux-amd64" ] && [ -f artifacts/slipstream-client-linux-amd64 ]; then
+              cp artifacts/slipstream-client-linux-amd64 "${dir}/slipstream-client"
+            fi
+
+            chmod +x "${dir}/findns${ext}" "${dir}/masterdnsvpn-client${ext}" 2>/dev/null || true
+            [ -f "${dir}/slipstream-client" ] && chmod +x "${dir}/slipstream-client" || true
+
+            python3 .github/release/render_readme.py "${os}" "${arch}" "${ext}" "${version}" "${dir}/README.txt"
+
+            (cd stage && zip -r "../out/${name}.zip" "${name}" >/dev/null)
+            ls -la "out/${name}.zip"
+          }
+
+          package linux   amd64 ""
+          package linux   arm64 ""
+          package darwin  amd64 ""
+          package darwin  arm64 ""
+          package windows amd64 .exe
 
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/*
+          files: out/*.zip
           generate_release_notes: true

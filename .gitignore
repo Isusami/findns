@@ -15,8 +15,8 @@ client_config.toml
 mdkey.txt
 .mdvpn/
 
-# Scratch scan inputs/outputs
-scan_ips*.txt
+# Scratch scan inputs/outputs (the bundled scan_ips_public.txt IS tracked)
+scan_ips.txt
 mdvpn_results*.json
 
 # IDE / OS noise

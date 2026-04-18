@@ -74,8 +74,8 @@ func init() {
 	scanCmd.Flags().Int("edns-size", 1232, "EDNS0 UDP payload size in bytes (default 1232, lower if fragmented)")
 	scanCmd.Flags().Int("query-size", 50, "cap dnstt-client upstream query size in bytes (default 50, use 0 for max)")
 	scanCmd.Flags().StringSlice("cidr", nil, "CIDR range(s) to scan (e.g. --cidr 5.52.0.0/16)")
-	scanCmd.Flags().String("cidr-file", "", "text file with one CIDR range per line to scan (auto-detects ipv4.txt next to findns when no input source is set)")
-	scanCmd.Flags().Int("cidr-sample", 0, "pick N random IPs per CIDR (0 = all usable IPs; use a small N like 10 with the bundled ipv4.txt to keep scans tractable)")
+	scanCmd.Flags().String("cidr-file", "", "text file with one CIDR range per line to scan (auto-detects scan_ips_public.txt next to findns when no input source is set)")
+	scanCmd.Flags().Int("cidr-sample", 0, "pick N random IPs per CIDR (0 = all usable IPs; use a small N like 10 with the bundled scan_ips_public.txt to keep scans tractable)")
 	scanCmd.Flags().String("output-ips", "", "write plain IP list (one per line) to this file")
 	scanCmd.Flags().Int("top", 10, "number of top results to display")
 	scanCmd.Flags().Int("batch", 0, "scan N resolvers at a time, saving after each batch (0 = all at once)")
@@ -109,13 +109,13 @@ func runScan(cmd *cobra.Command, args []string) error {
 	mdvpnCfg, _ := cmd.Flags().GetString("masterdns-config")
 	mdvpnMTUBisect, _ := cmd.Flags().GetBool("masterdns-mtu-bisect")
 
-	// Auto-detect bundled ipv4.txt next to the running binary when no
-	// input source is set. This is shipped as a release asset so users
-	// can `findns scan --domain ...` with no extra flags after dropping
-	// the file next to the binary.
+	// Auto-detect bundled scan_ips_public.txt next to the running binary
+	// when no input source is set. This is shipped inside every release
+	// zip so users can `findns scan --domain ...` with no extra flags
+	// after extracting the archive.
 	if cidrFile == "" && len(cidrRanges) == 0 && inputFile == "" {
 		if exe, err := os.Executable(); err == nil {
-			cand := filepath.Join(filepath.Dir(exe), "ipv4.txt")
+			cand := filepath.Join(filepath.Dir(exe), "scan_ips_public.txt")
 			if _, err := os.Stat(cand); err == nil {
 				cidrFile = cand
 				fmt.Fprintf(os.Stderr, "  auto-detected bundled CIDR list: %s\n", cand)
@@ -180,7 +180,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 		}
 		const maxCIDRExpand = 1_000_000
 		if cidrSample == 0 && totalUsable > maxCIDRExpand {
-			return fmt.Errorf("--cidr expands to %d IPs (max %d) — use --cidr-sample N to sample N random IPs per subnet, or run 'findns local --discover' for large ranges", totalUsable, maxCIDRExpand)
+			return fmt.Errorf("--cidr expands to %d IPs (max %d) — use --cidr-sample N to sample N random IPs per subnet (e.g. --cidr-sample 10 with the bundled scan_ips_public.txt)", totalUsable, maxCIDRExpand)
 		}
 		expanded, err := data.ExpandCIDRsSampled(cidrRanges, cidrSample)
 		if err != nil {
