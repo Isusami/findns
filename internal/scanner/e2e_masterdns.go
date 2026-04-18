@@ -232,12 +232,19 @@ func readMasterDnsMTU(path, ip string) (up, down float64, ok bool) {
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
-		if line == "" || !strings.HasPrefix(line, ip) {
+		if line == "" {
 			continue
 		}
-		// "<ip> UP=<n> DOWN=<n>"
 		fields := strings.Fields(line)
+		// "<ip> UP=<n> DOWN=<n>"
 		if len(fields) < 3 {
+			continue
+		}
+		// Gate on exact equality of the first whitespace-token, NOT a
+		// substring match of the raw line. strings.HasPrefix(line, ip)
+		// silently misattributed a longer prefix-collision IP's UP/DOWN
+		// to the queried IP (e.g. "1.1.1.10" matched query "1.1.1.1").
+		if fields[0] != ip {
 			continue
 		}
 		var u, d float64

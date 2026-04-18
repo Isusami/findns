@@ -119,18 +119,58 @@ func TestReadMasterDnsMTU_PartialFields(t *testing.T) {
 
 func TestReadMasterDnsMTU_PrefixMatchOnly(t *testing.T) {
 	// "1.1.1.10" must not match a query for "1.1.1.1" — readMasterDnsMTU
-	// uses HasPrefix and then field-splits, so we check it doesn't pull
-	// values from a different (longer) row by accident.
+	// must compare the first whitespace-token for exact equality, not use
+	// HasPrefix on the full line (which would silently misattribute MTU).
 	tmp := t.TempDir()
 	path := filepath.Join(tmp, "mtu.log")
 	os.WriteFile(path, []byte("1.1.1.10 UP=1 DOWN=1\n"), 0o600)
-	// HasPrefix matches "1.1.1.1" against "1.1.1.10". The fields-based
-	// parse still treats the first field as a single IP-ish token, so we
-	// document the current behaviour: the line WILL match. This test
-	// exists so future tightening (e.g. exact-token match) is intentional
-	// and visible in the test diff.
-	if _, _, ok := readMasterDnsMTU(path, "1.1.1.1"); !ok {
-		t.Skip("readMasterDnsMTU now uses exact-token match (good); update this test")
+	if _, _, ok := readMasterDnsMTU(path, "1.1.1.1"); ok {
+		t.Fatal("expected !ok — '1.1.1.1' must not match a row whose first token is '1.1.1.10'")
+	}
+}
+
+// Bug 1 reproduction: covers H1/H2/H3 from the debug session. Each subtest
+// queries a short IP against an MTU file containing a longer prefix-collision
+// IP. All three currently FAIL with the buggy strings.HasPrefix(line, ip)
+// implementation and pass once the parser switches to fields[0] == ip.
+func TestReadMasterDnsMTU_BugRepro_PrefixCollision(t *testing.T) {
+	cases := []struct {
+		name     string
+		query    string
+		fileBody string
+		// wantOK = expected ok return; for these scenarios we want false
+		// (the queried IP genuinely isn't in the file).
+	}{
+		{
+			name:     "H1_only_longer_ip_in_file",
+			query:    "1.1.1.1",
+			fileBody: "1.1.1.10 UP=999 DOWN=888\n",
+		},
+		{
+			name:     "H2_longer_ip_first_no_exact_match",
+			query:    "1.1.1.1",
+			fileBody: "1.1.1.10 UP=999 DOWN=888\n1.1.1.100 UP=777 DOWN=666\n",
+		},
+		{
+			name:     "H3_different_subnet_collision",
+			query:    "10.0.0.1",
+			fileBody: "10.0.0.10 UP=42 DOWN=24\n",
+		},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			tmp := t.TempDir()
+			path := filepath.Join(tmp, "mtu.log")
+			if err := os.WriteFile(path, []byte(tc.fileBody), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			up, down, ok := readMasterDnsMTU(path, tc.query)
+			if ok {
+				t.Fatalf("BUG: query=%q matched non-equal first token; got up=%v down=%v ok=true (want ok=false)",
+					tc.query, up, down)
+			}
+		})
 	}
 }
 
