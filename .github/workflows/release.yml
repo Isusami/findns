@@ -138,6 +138,8 @@ jobs:
     needs: [build, build-slipstream, bundle-masterdnsvpn-client]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
@@ -146,6 +148,12 @@ jobs:
       - name: Rename slipstream binary
         run: |
           mv artifacts/slipstream-client artifacts/slipstream-client-linux-amd64 2>/dev/null || true
+
+      - name: Stage bundled CIDR list
+        # Ship the curated /24 CIDR list as a standalone asset so users
+        # can drop it next to the findns binary; `findns scan` auto-detects
+        # it as a default --cidr-file when no other input source is set.
+        run: cp ipv4.txt artifacts/ipv4.txt
 
       - name: Create release
         uses: softprops/action-gh-release@v2

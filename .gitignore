@@ -2,3 +2,24 @@
 *.exe~
 results.json
 results.js
+
+# Local build artifacts
+/findns
+/dns-scanner
+/findns-*
+
+# User-specific MasterDnsVPN runtime files
+masterdnsvpn-client
+masterdnsvpn-client-*
+client_config.toml
+mdkey.txt
+.mdvpn/
+
+# Scratch scan inputs/outputs
+scan_ips*.txt
+mdvpn_results*.json
+
+# IDE / OS noise
+.DS_Store
+.idea/
+.vscode/

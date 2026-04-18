@@ -31,6 +31,17 @@ var rootCmd = &cobra.Command{
 	// help on terminals that can't host the TUI (notably legacy Windows
 	// cmd.exe consoles where MakeRaw fails with "parameter is incorrect").
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// On Windows, when the user double-clicks findns.exe from
+		// Explorer a fresh console window opens just for us. Trying
+		// to start the TUI in that context (or even printing help
+		// and exiting) makes the window flash and close before the
+		// user can read anything. Detect that case up front and show
+		// a short, friendly message that waits for Enter so the
+		// window stays put.
+		if wasLaunchedFromExplorer() {
+			showExplorerLaunchHintAndWait()
+			return nil
+		}
 		cfg := tui.ScanConfig{
 			OutputFile: outputFile,
 			Workers:    workers,

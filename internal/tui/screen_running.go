@@ -3,6 +3,8 @@ package tui
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -10,6 +12,23 @@ import (
 	"github.com/SamNet-dev/findns/internal/scanner"
 	tea "github.com/charmbracelet/bubbletea"
 )
+
+// parseMasterDnsDomains splits the comma- (or pipe-) separated TUI input
+// into a clean slice. Whitespace is trimmed; empty entries are dropped.
+func parseMasterDnsDomains(s string) []string {
+	if s == "" {
+		return nil
+	}
+	repl := strings.NewReplacer("|", ",", ";", ",", "\n", ",")
+	parts := strings.Split(repl.Replace(s), ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if t := strings.TrimSpace(p); t != "" {
+			out = append(out, t)
+		}
+	}
+	return out
+}
 
 type stepProgress struct {
 	name     string
@@ -38,8 +57,12 @@ func buildSteps(cfg ScanConfig) ([]scanner.Step, error) {
 	var steps []scanner.Step
 
 	// Pre-flight: find e2e binaries if needed
-	var dnsttBin, slipstreamBin string
-	needE2E := cfg.Pubkey != "" || cfg.Cert != ""
+	var dnsttBin, slipstreamBin, mdvpnBin string
+	var mdvpnDomains []string
+	var mdvpnOpts scanner.MasterDnsOpts
+	mdvpnDomains = parseMasterDnsDomains(cfg.MasterDnsDomains)
+	mdvpnRequested := len(mdvpnDomains) > 0 && (cfg.MasterDnsKey != "" || cfg.MasterDnsKeyFile != "")
+	needE2E := cfg.Pubkey != "" || cfg.Cert != "" || mdvpnRequested
 	if cfg.Pubkey != "" {
 		bin, err := binutil.Find("dnstt-client")
 		if err != nil {
@@ -53,6 +76,38 @@ func buildSteps(cfg ScanConfig) ([]scanner.Step, error) {
 			return nil, fmt.Errorf("cert requires slipstream-client in PATH")
 		}
 		slipstreamBin = bin
+	}
+	if mdvpnRequested {
+		bin, err := binutil.Find("masterdnsvpn-client")
+		if err != nil {
+			return nil, fmt.Errorf("MasterDns Domains require masterdnsvpn-client: %w", err)
+		}
+		mdvpnBin = bin
+		key, err := scanner.LoadMasterDnsKey(cfg.MasterDnsKey, cfg.MasterDnsKeyFile)
+		if err != nil {
+			return nil, fmt.Errorf("masterdns key: %w", err)
+		}
+		encMethod := cfg.MasterDnsEncryptionMethod
+		if encMethod < 0 || encMethod > 5 {
+			encMethod = 1
+		}
+		template := cfg.MasterDnsConfigTemplate
+		if template == "" {
+			// Auto-detect a client_config.toml sitting next to findns.
+			if exe, err := os.Executable(); err == nil {
+				cand := filepath.Join(filepath.Dir(exe), "client_config.toml")
+				if _, err := os.Stat(cand); err == nil {
+					template = cand
+				}
+			}
+		}
+		mdvpnOpts = scanner.MasterDnsOpts{
+			Domains:          mdvpnDomains,
+			Key:              key,
+			EncryptionMethod: encMethod,
+			ConfigTemplate:   template,
+			MTUBisect:        cfg.MasterDnsMTUBisect,
+		}
 	}
 	var ports chan int
 	if needE2E {
@@ -125,6 +180,12 @@ func buildSteps(cfg ScanConfig) ([]scanner.Step, error) {
 			steps = append(steps, scanner.Step{
 				Name: "e2e/slipstream", Timeout: e2eDur,
 				Check: scanner.SlipstreamCheckBin(slipstreamBin, cfg.Domain, cfg.Cert, ports), SortBy: "e2e_ms",
+			})
+		}
+		if mdvpnRequested {
+			steps = append(steps, scanner.Step{
+				Name: "e2e/masterdns", Timeout: e2eDur,
+				Check: scanner.MasterDnsCheckBin(mdvpnBin, mdvpnOpts, ports), SortBy: "mdvpn_e2e_ms",
 			})
 		}
 	}

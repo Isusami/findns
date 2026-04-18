@@ -24,6 +24,11 @@ const (
 	txtEDNSSize
 	txtQuerySize
 	txtE2ETimeout
+	txtMDDomains
+	txtMDKey
+	txtMDKeyFile
+	txtMDEncMethod
+	txtMDConfig
 	numTextInputs
 )
 
@@ -41,10 +46,17 @@ const (
 	fEDNS
 	fEDNSSize
 	fQuerySize
-	fE2E       // toggle: enables/disables e2e section
-	fPubkey    // e2e fields below
+	fE2E    // toggle: enables/disables e2e section
+	fPubkey // e2e fields below
 	fCert
 	fE2ETimeout
+	// MasterDnsVPN e2e block (only shown when fE2E is on)
+	fMDDomains
+	fMDKey
+	fMDKeyFile
+	fMDEncMethod
+	fMDConfig
+	fMDMTUBisect
 	fStart
 )
 
@@ -73,12 +85,22 @@ var allFields = []fieldDef{
 	{fPubkey, "Pubkey", "", "Hex public key for dnstt. Requires dnstt-client in PATH.", txtPubkey},
 	{fCert, "Cert", "", "Path to slipstream TLS cert. Requires slipstream-client in PATH.", txtCert},
 	{fE2ETimeout, "E2E Timeout (s)", "", "Seconds to wait for each e2e tunnel connectivity test.", txtE2ETimeout},
+	{fMDDomains, "MasterDns Domains", "MasterDnsVPN", "Comma-separated tunnel domains (e.g. w.example.com,w.example2.com). Requires masterdnsvpn-client.", txtMDDomains},
+	{fMDKey, "MasterDns Key", "", "Inline shared encryption key. Prefer Key File for anything you don't want in shell history.", txtMDKey},
+	{fMDKeyFile, "MasterDns Key File", "", "Path to a file containing the encryption key (single line). Takes precedence over inline key.", txtMDKeyFile},
+	{fMDEncMethod, "MasterDns Method", "", "Encryption method 0..5: 0=None 1=XOR 2=ChaCha20 3=AES-128-GCM 4=AES-192-GCM 5=AES-256-GCM. Must match server.", txtMDEncMethod},
+	{fMDConfig, "MasterDns Config", "", "Optional path to template client_config.toml. Auto-detected next to findns if left empty.", txtMDConfig},
+	{fMDMTUBisect, "MasterDns MTU Bisect", "", "Also collect upstream/downstream MTU per resolver (slower, adds mdvpn_up_mtu/mdvpn_down_mtu metrics).", -1},
 	{fStart, "Start Scan", "", "Run the scan with the settings above.", -1},
 }
 
-// e2eSubFields are only shown when E2E toggle is on.
+// e2eSubFields are only shown when E2E toggle is on. The MasterDnsVPN
+// block is part of the E2E section: it's only meaningful when the user
+// has opted into E2E testing, since it's another tunnel client.
 var e2eSubFields = map[fieldID]bool{
 	fPubkey: true, fCert: true, fE2ETimeout: true,
+	fMDDomains: true, fMDKey: true, fMDKeyFile: true,
+	fMDEncMethod: true, fMDConfig: true, fMDMTUBisect: true,
 }
 
 // visibleFields returns the currently visible field list based on config state.
@@ -147,12 +169,34 @@ func initConfigInputs() []textinput.Model {
 	inputs[txtE2ETimeout].SetValue("30")
 	inputs[txtE2ETimeout].CharLimit = 3
 
+	inputs[txtMDDomains] = textinput.New()
+	inputs[txtMDDomains].Placeholder = "w.example.com, w.example2.com"
+	inputs[txtMDDomains].CharLimit = 1024
+
+	inputs[txtMDKey] = textinput.New()
+	inputs[txtMDKey].Placeholder = "shared encryption key"
+	inputs[txtMDKey].CharLimit = 256
+	inputs[txtMDKey].EchoMode = textinput.EchoPassword
+
+	inputs[txtMDKeyFile] = textinput.New()
+	inputs[txtMDKeyFile].Placeholder = "mdkey.txt"
+	inputs[txtMDKeyFile].CharLimit = 512
+
+	inputs[txtMDEncMethod] = textinput.New()
+	inputs[txtMDEncMethod].Placeholder = "1"
+	inputs[txtMDEncMethod].SetValue("1")
+	inputs[txtMDEncMethod].CharLimit = 1
+
+	inputs[txtMDConfig] = textinput.New()
+	inputs[txtMDConfig].Placeholder = "client_config.toml (auto-detected)"
+	inputs[txtMDConfig].CharLimit = 512
+
 	inputs[txtDomain].Focus()
 	return inputs
 }
 
 func isToggle(id fieldID) bool {
-	return id == fSkipPing || id == fSkipNXD || id == fEDNS || id == fE2E
+	return id == fSkipPing || id == fSkipNXD || id == fEDNS || id == fE2E || id == fMDMTUBisect
 }
 
 func currentField(m Model) fieldDef {
@@ -231,6 +275,8 @@ func toggleField(m *Model, id fieldID) {
 		m.config.SkipNXDomain = !m.config.SkipNXDomain
 	case fEDNS:
 		m.config.EDNS = !m.config.EDNS
+	case fMDMTUBisect:
+		m.config.MasterDnsMTUBisect = !m.config.MasterDnsMTUBisect
 	case fE2E:
 		m.config.E2E = !m.config.E2E
 		// Keep cursor on the E2E toggle after field list changes
@@ -290,12 +336,29 @@ func applyConfig(m Model) (Model, tea.Cmd) {
 		m.config.E2ETimeout = v
 	}
 
+	m.config.MasterDnsDomains = strings.TrimSpace(m.configInputs[txtMDDomains].Value())
+	m.config.MasterDnsKey = strings.TrimSpace(m.configInputs[txtMDKey].Value())
+	m.config.MasterDnsKeyFile = strings.TrimSpace(m.configInputs[txtMDKeyFile].Value())
+	m.config.MasterDnsConfigTemplate = strings.TrimSpace(m.configInputs[txtMDConfig].Value())
+	if v, err := strconv.Atoi(m.configInputs[txtMDEncMethod].Value()); err == nil && v >= 0 && v <= 5 {
+		m.config.MasterDnsEncryptionMethod = v
+	}
+
 	// Clear all e2e fields if e2e is disabled
 	if !m.config.E2E {
 		m.config.Pubkey = ""
 		m.config.Cert = ""
 		m.configInputs[txtPubkey].SetValue("")
 		m.configInputs[txtCert].SetValue("")
+		m.config.MasterDnsDomains = ""
+		m.config.MasterDnsKey = ""
+		m.config.MasterDnsKeyFile = ""
+		m.config.MasterDnsConfigTemplate = ""
+		m.config.MasterDnsMTUBisect = false
+		m.configInputs[txtMDDomains].SetValue("")
+		m.configInputs[txtMDKey].SetValue("")
+		m.configInputs[txtMDKeyFile].SetValue("")
+		m.configInputs[txtMDConfig].SetValue("")
 	}
 
 	if m.config.OutputFile == "" {
@@ -395,6 +458,8 @@ func getToggleValue(m Model, id fieldID) bool {
 		return m.config.EDNS
 	case fE2E:
 		return m.config.E2E
+	case fMDMTUBisect:
+		return m.config.MasterDnsMTUBisect
 	}
 	return false
 }
@@ -406,6 +471,7 @@ func binaryStatus() string {
 		bin  string
 	}{
 		{"dnstt-client", "dnstt-client"},
+		{"masterdnsvpn-client", "masterdnsvpn-client"},
 	}
 	// slipstream-client only available on Linux/macOS
 	if runtime.GOOS != "windows" {

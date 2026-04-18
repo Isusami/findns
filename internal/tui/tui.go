@@ -36,6 +36,16 @@ type ScanConfig struct {
 	E2E          bool
 	DoH          bool
 	OutputFile   string
+
+	// MasterDnsVPN e2e step. Domains is comma-separated in the UI;
+	// applyConfig parses it into a string slice when starting the scan.
+	// Either Key or KeyFile must be set for the step to be enabled.
+	MasterDnsDomains          string
+	MasterDnsKey              string
+	MasterDnsKeyFile          string
+	MasterDnsEncryptionMethod int
+	MasterDnsConfigTemplate   string
+	MasterDnsMTUBisect        bool
 }
 
 type Model struct {
@@ -98,6 +108,9 @@ func NewModelWithConfig(cfg ScanConfig) Model {
 	if cfg.EDNSSize <= 0 {
 		cfg.EDNSSize = 1232
 	}
+	if cfg.MasterDnsEncryptionMethod < 0 || cfg.MasterDnsEncryptionMethod > 5 {
+		cfg.MasterDnsEncryptionMethod = 1
+	}
 
 	inputs := initConfigInputs()
 
@@ -120,6 +133,20 @@ func NewModelWithConfig(cfg ScanConfig) Model {
 	inputs[txtEDNSSize].SetValue(fmt.Sprintf("%d", cfg.EDNSSize))
 	inputs[txtQuerySize].SetValue(fmt.Sprintf("%d", cfg.QuerySize))
 	inputs[txtE2ETimeout].SetValue(fmt.Sprintf("%d", cfg.E2ETimeout))
+
+	if cfg.MasterDnsDomains != "" {
+		inputs[txtMDDomains].SetValue(cfg.MasterDnsDomains)
+	}
+	if cfg.MasterDnsKey != "" {
+		inputs[txtMDKey].SetValue(cfg.MasterDnsKey)
+	}
+	if cfg.MasterDnsKeyFile != "" {
+		inputs[txtMDKeyFile].SetValue(cfg.MasterDnsKeyFile)
+	}
+	inputs[txtMDEncMethod].SetValue(fmt.Sprintf("%d", cfg.MasterDnsEncryptionMethod))
+	if cfg.MasterDnsConfigTemplate != "" {
+		inputs[txtMDConfig].SetValue(cfg.MasterDnsConfigTemplate)
+	}
 
 	return Model{
 		screen:       screenWelcome,
